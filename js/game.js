@@ -109,6 +109,7 @@
       UI.bind('playBtn', () => this.start());
       UI.bind('againBtn', () => this.start());
       UI.bind('charBtn', () => this.setState('character'));
+      UI.bind('waitBtn', () => { if (this.settings.fullscreen) VR.Fullscreen.request(); this.duel.openWaitingArena(); });
       UI.bind('charPrev', () => this.cycleChar(-1));
       UI.bind('charNext', () => this.cycleChar(1));
       UI.bind('charDone', () => { UI.store.set('character', VR.CHARACTERS[this.charIndex].id); this.setState('menu'); });

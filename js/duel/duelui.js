@@ -33,6 +33,11 @@
     'du.t.fire': 'FIRE', 'du.t.aim': 'SCOPE', 'du.t.nade': 'PUSH', 'du.t.swap': 'SWAP', 'du.t.jump': 'Jump', 'du.t.crouch': 'Slide',
     'du.keys': 'Left click fire · Right click scope · Q impulse grenade · 1 / 2 switch · R reload · Space jump · C slide',
     'du.keyHint': 'Y accept · N decline',
+    'menu.wait': 'WAIT FOR A PLAYER', 'menu.waitSub': '1v1 Sniper Arena',
+    'du.lobbyTitle': 'Waiting for another player…', 'du.lobbySub': 'Practise moving and sniping. The duel starts from round 1 as soon as someone joins.',
+    'du.lobbyOnline': '{n} online now', 'du.lobbyConnecting': 'Connecting…', 'du.found': '{name} joined! The duel begins',
+    'du.leave': 'LEAVE THE ARENA', 'du.pauseSolo': 'Waiting room', 'du.pauseSoloNote': 'You can leave any time; nobody is playing against you yet.',
+    'du.why.wait': 'waiting in the arena', 'du.onlineOn': 'Online challenges turned on',
   });
   Object.assign(VR.I18N.STRINGS.ar, {
     'settings.online': 'التحديات الأونلاين',
@@ -55,6 +60,11 @@
     'du.t.fire': 'إطلاق', 'du.t.aim': 'منظار', 'du.t.nade': 'دفع', 'du.t.swap': 'تبديل', 'du.t.jump': 'قفز', 'du.t.crouch': 'انزلاق',
     'du.keys': 'زر الفأرة الأيسر: إطلاق · الأيمن: منظار · Q: قنبلة الدفع · 1 / 2: تبديل · R: تلقيم · Space: قفز · C: انزلاق',
     'du.keyHint': 'Y قبول · N رفض',
+    'menu.wait': 'انتظار لاعب', 'menu.waitSub': 'ساحة القنص 1v1',
+    'du.lobbyTitle': 'بانتظار لاعب آخر…', 'du.lobbySub': 'تدرّب على الحركة والقنص. يبدأ التحدي من الجولة الأولى فور وصول لاعب.',
+    'du.lobbyOnline': 'متصلون الآن: {n}', 'du.lobbyConnecting': 'نتصل…', 'du.found': '{name} وصل! يبدأ التحدي',
+    'du.leave': 'الخروج من الساحة', 'du.pauseSolo': 'ساحة الانتظار', 'du.pauseSoloNote': 'يمكنك الخروج متى شئت، لا أحد يلعب ضدك بعد.',
+    'du.why.wait': 'ينتظر في الساحة', 'du.onlineOn': 'تم تشغيل التحديات الأونلاين',
   });
 
   const hex = (c) => '#' + c.toString(16).padStart(6, '0');
@@ -76,6 +86,7 @@
           <div class="du-mid"><div class="du-timer num">45</div><div class="du-roundlbl"></div></div>
           <div class="du-side du-opp"><span class="du-sw"></span><b class="du-name"></b><span class="du-pips"></span></div>
         </div>
+        <div class="du-waitbar panel" hidden><b class="du-wt"></b><span class="du-wo"></span><small class="du-ws"></small></div>
         <div class="du-cross"><i></i><i></i><i></i><i></i></div>
         <div class="du-hit" hidden><i></i><i></i><i></i><i></i></div>
         <div class="du-scope" hidden></div>
@@ -139,7 +150,7 @@
         <div class="du-row ${c.st === 'free' ? '' : 'busy'}">
           <span class="du-dot ${c.st}"></span>
           <span class="du-pname">${esc(c.name)}</span>
-          <span class="du-pst">${c.st === 'free' ? T('du.free') : esc(c.whyText)}</span>
+          <span class="du-pst">${c.st === 'free' ? esc(c.freeText || T('du.free')) : esc(c.whyText)}</span>
           <button class="btn small du-go" data-id="${esc(c.key)}" ${c.st === 'free' ? '' : 'disabled'}>${T('du.challenge')}</button>
         </div>`;
       let body = '';
@@ -262,13 +273,21 @@
     // ------------------------------------------------------------ overlays
     get modal() { return !this.el.overlay.hidden; }
     closeOverlay() { this.el.overlay.hidden = true; this.el.card.innerHTML = ''; }
-    showPause(onResume, onForfeit) {
+    setSolo(on) {
+      this.root.classList.toggle('solo', on);
+      this.root.querySelector('.du-waitbar').hidden = !on;
+    }
+    setWaitText(title, online, sub) {
+      const w = this.root.querySelector('.du-waitbar');
+      w.querySelector('.du-wt').textContent = title; w.querySelector('.du-wo').textContent = online; w.querySelector('.du-ws').textContent = sub;
+    }
+    showPause(onResume, onForfeit, solo) {
       this.el.card.innerHTML = `
-        <h2 class="heading">${T('du.pauseTitle')}</h2>
-        <p class="du-sub">${T('du.pauseNote')}</p>
+        <h2 class="heading">${T(solo ? 'du.pauseSolo' : 'du.pauseTitle')}</h2>
+        <p class="du-sub">${T(solo ? 'du.pauseSoloNote' : 'du.pauseNote')}</p>
         <button class="btn primary" id="duResume">${T('du.resume')}</button>
         <button class="btn fs-wide du-fsbtn" id="duFs"><i class="fs-ico"></i> ${VR.Fullscreen.isOn() ? T('fs.exit') : T('fs.enter')}</button>
-        <button class="btn" id="duForfeit">${T('du.forfeit')}</button>`;
+        <button class="btn" id="duForfeit">${T(solo ? 'du.leave' : 'du.forfeit')}</button>`;
       this.el.card.querySelector('#duFs').addEventListener('click', (e) => { VR.Audio.play('click'); VR.Fullscreen.toggle(); e.currentTarget.lastChild.textContent = ' ' + (VR.Fullscreen.isOn() ? T('fs.enter') : T('fs.exit')); });
       this.el.card.querySelector('#duResume').addEventListener('click', () => { VR.Audio.play('click'); onResume(); });
       this.el.card.querySelector('#duForfeit').addEventListener('click', () => { VR.Audio.play('click'); onForfeit(); });
@@ -307,7 +326,8 @@
       let sid = null, ox = 0, oy = 0, lid = null, lx = 0, ly = 0;
       zone.addEventListener('pointerdown', (e) => {
         sid = e.pointerId; ox = e.clientX; oy = e.clientY; try { zone.setPointerCapture(sid); } catch (err) { /* ignore */ }
-        stick.style.left = ox + 'px'; stick.style.top = oy + 'px'; stick.classList.add('on');
+        const zr = zone.getBoundingClientRect();          // the stick lives inside the zone: draw it under the finger
+        stick.style.left = (ox - zr.left) + 'px'; stick.style.top = (oy - zr.top) + 'px'; stick.classList.add('on');
       });
       zone.addEventListener('pointermove', (e) => {
         if (e.pointerId !== sid) return;
@@ -315,7 +335,7 @@
         if (l > R) { dx *= R / l; dy *= R / l; }
         knob.style.transform = `translate(${dx}px, ${dy}px)`; VR.Input.setTouchMove(dx / R, -dy / R);
       });
-      const endStick = (e) => { if (e.pointerId !== sid) return; sid = null; knob.style.transform = ''; stick.classList.remove('on'); VR.Input.setTouchMove(0, 0); };
+      const endStick = (e) => { if (e.pointerId !== sid) return; sid = null; knob.style.transform = ''; stick.classList.remove('on'); stick.style.left = ''; stick.style.top = ''; VR.Input.setTouchMove(0, 0); };
       zone.addEventListener('pointerup', endStick); zone.addEventListener('pointercancel', endStick);
       look.addEventListener('pointerdown', (e) => { lid = e.pointerId; lx = e.clientX; ly = e.clientY; try { look.setPointerCapture(lid); } catch (err) { /* ignore */ } });
       look.addEventListener('pointermove', (e) => { if (e.pointerId !== lid) return; const k = VR.Input.aimHeld() ? 0.8 : 2.2; VR.Input.addLook((e.clientX - lx) * k, (e.clientY - ly) * k); lx = e.clientX; ly = e.clientY; });

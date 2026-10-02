@@ -327,7 +327,8 @@
       let sid = null, ox = 0, oy = 0, lid = null, lx = 0, ly = 0;
       zone.addEventListener('pointerdown', (e) => {
         sid = e.pointerId; ox = e.clientX; oy = e.clientY; try { zone.setPointerCapture(sid); } catch (err) { /* synthetic or ended pointer */ }
-        stick.style.left = ox + 'px'; stick.style.top = oy + 'px'; stick.classList.add('on');
+        const zr = zone.getBoundingClientRect();          // the stick lives inside the zone: draw it under the finger
+        stick.style.left = (ox - zr.left) + 'px'; stick.style.top = (oy - zr.top) + 'px'; stick.classList.add('on');
       });
       zone.addEventListener('pointermove', (e) => {
         if (e.pointerId !== sid) return;
@@ -337,7 +338,7 @@
         knob.style.transform = `translate(${dx}px, ${dy}px)`;
         VR.Input.setTouchMove(dx / R, -dy / R);
       });
-      const endStick = (e) => { if (e.pointerId !== sid) return; sid = null; knob.style.transform = ''; stick.classList.remove('on'); VR.Input.setTouchMove(0, 0); };
+      const endStick = (e) => { if (e.pointerId !== sid) return; sid = null; knob.style.transform = ''; stick.classList.remove('on'); stick.style.left = ''; stick.style.top = ''; VR.Input.setTouchMove(0, 0); };
       zone.addEventListener('pointerup', endStick); zone.addEventListener('pointercancel', endStick);
       look.addEventListener('pointerdown', (e) => { lid = e.pointerId; lx = e.clientX; ly = e.clientY; try { look.setPointerCapture(lid); } catch (err) { /* ignore */ } });
       look.addEventListener('pointermove', (e) => { if (e.pointerId !== lid) return; VR.Input.addLook((e.clientX - lx) * 2.2, (e.clientY - ly) * 2.2); lx = e.clientX; ly = e.clientY; });

@@ -42,6 +42,9 @@
   let dragLook = false, lastMX = 0, lastMY = 0;
   let wantLock = false;
 
+  // phones/tablets: no mouse to capture. Asking for pointer lock there (e.g. together with
+  // fullscreen) could grab and drop it at once, which reads as "Esc" and paused the room.
+  const touchFirst = () => !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   const typing = (e) => { const t = e.target; return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable); };
 
   window.addEventListener('keydown', (e) => {
@@ -85,7 +88,8 @@
     // a lock granted after we stopped wanting it (e.g. a menu opened meanwhile): give it back
     if (locked() && (!wantLock || !fpEnabled || mode !== 'fp')) { try { document.exitPointerLock(); } catch (e) { /* ignore */ } return; }
     // the browser releases the lock on Esc: treat that as "pause"
-    if (mode === 'fp' && wantLock && !locked() && fpEnabled) { wantLock = false; onPause && onPause(); }
+    if (mode === 'fp' && wantLock && !locked() && fpEnabled && !touchFirst()) { wantLock = false; onPause && onPause(); }
+    else if (!locked()) wantLock = false;
   });
 
   // --- swipes (runner) ----------------------------------------------------
@@ -148,7 +152,7 @@
     },
     requestLock() {
       const el = surface();
-      if (!el || locked()) return;
+      if (!el || locked() || touchFirst()) return;
       wantLock = true;
       try { const p = el.requestPointerLock(); if (p && p.catch) p.catch(() => { wantLock = false; }); } catch (e) { wantLock = false; }
     },

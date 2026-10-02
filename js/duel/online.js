@@ -97,7 +97,7 @@
       if (m.t === 'gone') { this.peers.delete(m.id); return; }
       if (m.t !== 'p') return;
       const isNew = !this.peers.has(m.id);
-      this.peers.set(m.id, { id: m.id, name: String(m.name || '').slice(0, 16), ch: m.ch, st: m.st === 'free' ? 'free' : 'busy', why: String(m.why || ''), seen: performance.now() });
+      this.peers.set(m.id, { id: m.id, name: String(m.name || '').slice(0, 16), ch: m.ch, st: m.st === 'free' || m.st === 'wait' ? m.st : 'busy', why: String(m.why || ''), seen: performance.now() });
       if (isNew || m.ask) this.beat();      // let a newcomer see us without waiting for the next beat
     }
     beat(ask) {

@@ -382,6 +382,12 @@ positions over the last 300 ms for lag) and owns health, rounds and score. The g
 shows what the host sends, so a player can't change the result on their own device.
 Grenade pushes are applied by each player to themselves (they never damage).
 
+**Waiting arena (main menu → "انتظار لاعب").** Enter the arena alone: move, jump, slide,
+snipe and grenade-jump freely while you show as *waiting* online. When another player
+arrives (someone else waiting, or a runner who picks you at a 1v1 gate) the duel starts at
+round 1 right there; afterwards you return to the menu. Two waiting players match on their
+own (the lower id invites, the other accepts automatically). Esc/pause → leave any time.
+
 **Return.** Result card (winner, loser, score, rounds, coins: +150 win / +30 loss), then
 each runner is restored exactly where they were (3-2-1 + short star). If a player leaves or
 disconnects (no message for 7 s), the other wins and returns; the arena is torn down.

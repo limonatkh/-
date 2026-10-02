@@ -87,7 +87,8 @@
     // ================================================================ availability
     busyReason(kind) {
       const st = this.game.state;
-      if (this.match || this.pending) return 'duel';
+      if (this.match && this.match.solo) return '';          // waiting in the arena: anyone may come and play
+      if (this.match || (this.pending && !this.pending.auto)) return 'duel';
       if (['mission', 'gateEnter', 'gateReturn'].includes(st)) return 'mission';
       if (['duelEnter', 'duel', 'duelReturn'].includes(st)) return 'duel';
       if (st === 'duelPick') return 'busy';
@@ -106,6 +107,40 @@
       this.ui.showPrompt(near && this.game.state === 'playing');
     }
     onRunnerInteract() { if (this.nearGate && this.game.state === 'playing') this.openPicker(); }
+
+    // ================================================================ waiting arena
+    /**
+     * Main menu → "Wait for a player": enter the arena alone and move/shoot freely.
+     * You show up online as "waiting". When another player arrives (another waiting
+     * player, or someone who challenges you from the road) the duel starts from round 1.
+     */
+    openWaitingArena() {
+      if (this.match || this.game.state !== 'menu') return;
+      if (!this.game.settings.online) { this.game.settings.online = true; this.game.applySettings(); VR.UI.toast(VR.t('du.onlineOn'), 1400); }
+      if (!VR.Online.connected) VR.Online.connect();
+      this.match = this.soloMatch();
+      this.matchT = 0;
+      this.game.beginDuel();
+    }
+    soloMatch() {
+      return {
+        solo: true, role: 'h', me: 'h', op: 'g', did: 'solo', chan: { kind: 'none', key: '', send() {} },
+        names: { h: this.myName(), g: '' }, tones: { h: 'white', g: 'grey' }, chars: { h: this.myChar(), g: null },
+        sc: { h: 0, g: 0 }, hp: { h: D.HP, g: D.HP }, round: 0, phase: 'practice', countT: 0, timeLeft: D.ROUND_TIME, endT: 0,
+        lastHeard: performance.now(), sendT: 0, history: [], oppLastFire: -9, rounds: 0, over: false, result: null,
+      };
+    }
+    /** While waiting: quietly invite another waiting player (the lower id invites, so only one does). */
+    matchmake(dt) {
+      this.matchT -= dt;
+      if (this.matchT > 0 || this.pending || !VR.Online.connected) return;
+      this.matchT = 1.5;
+      const other = VR.Online.list().find(p => p.st === 'wait' && p.id > VR.Online.id && !((this.cool.get('o:' + p.id) || 0) > performance.now()));
+      if (!other) return;
+      const chan = this.onlineChan(other.id, other.name, other.ch);
+      this.pending = { did: VR.Net.randomCode(8), chan, auto: true, left: 6, until: performance.now() + 6000 };
+      chan.send({ k: 'inv', did: this.pending.did, name: this.myName(), ch: this.myChar(), auto: 1 });
+    }
 
     // ================================================================ picker (inviter)
     openPicker() {
@@ -127,7 +162,9 @@
           if (fc && p.name === fc.name && false) continue;
           const key = 'o:' + p.id;
           const cooling = (this.cool.get(key) || 0) > now;
-          online.push({ key, name: p.name || VR.t('ch.defaultName'), st: p.st === 'free' && !cooling ? 'free' : 'busy', whyText: cooling ? busyTxt('cooldown') : busyTxt(p.why) });
+          const free = (p.st === 'free' || p.st === 'wait') && !cooling;
+          online.push({ key, name: p.name || VR.t('ch.defaultName'), st: free ? 'free' : 'busy', freeText: p.st === 'wait' ? busyTxt('wait') : '',
+            whyText: cooling ? busyTxt('cooldown') : p.st === 'wait' ? busyTxt('wait') : busyTxt(p.why) });
         }
       }
       if (friend && (this.cool.get(friend.key) || 0) > now) { friend.st = 'busy'; friend.whyText = busyTxt('cooldown'); }
@@ -167,6 +204,7 @@
     endPending(kind, why) {
       const p = this.pending; if (!p) return;
       this.pending = null;
+      if (p.auto) { this.cool.set(p.chan.key, performance.now() + 4000); return; }   // waiting-room match attempt: just try again later
       if (kind !== 'unavailable' || why === 'cooldown') this.cool.set(p.chan.key, performance.now() + D.COOLDOWN * 1000);
       const name = p.chan.name;
       const text = kind === 'declined' ? VR.t('du.declined', { name }) : kind === 'timeout' ? VR.t('du.timeout', { name })
@@ -185,6 +223,8 @@
       if ((this.declinedFrom.get(chan.key) || 0) > performance.now()) return chan.send({ k: 'ans', did: d.did, ok: false, why: 'cooldown' });
       this.incoming = { did: d.did, chan, name: String(d.name || chan.name).slice(0, 16), ch: d.ch, left: D.INVITE_TIME, until: performance.now() + D.INVITE_TIME * 1000 };
       chan.name = this.incoming.name; chan.ch = d.ch || chan.ch;
+      // waiting in the arena = waiting for exactly this: start right away
+      if (this.match && this.match.solo) return this.acceptInvite();
       this.ui.showInvite(this.incoming.name, D.INVITE_TIME, D.INVITE_TIME, () => this.acceptInvite(), () => this.declineInvite());
     }
     acceptInvite() {
@@ -192,6 +232,7 @@
       this.incoming = null; this.ui.hideInvite();
       const why = this.busyReason(inc.chan.kind);
       if (why) { inc.chan.send({ k: 'ans', did: inc.did, ok: false, why }); return; }
+      if (this.pending && this.pending.auto) { this.pending.chan.send({ k: 'cancel', did: this.pending.did }); this.pending = null; }
       inc.chan.send({ k: 'ans', did: inc.did, ok: true, name: this.myName(), ch: this.myChar() });
       this.startMatch('g', inc.chan, inc.did);
     }
@@ -228,7 +269,7 @@
         if (d.k === 'st' || d.k === 'ready') chan.send({ k: 'bye', did: d.did });
         return;
       }
-      m.lastHeard = performance.now();
+      m.lastHeard = performance.now(); m.heard = true;
       switch (d.k) {
         case 'ready': m.oppReady = true; if (m.role === 'h') this.hostMaybeStart(true); break;
         case 'rs': if (m.role === 'g') this.beginRound(d.n, d.sc); break;
@@ -248,6 +289,7 @@
     startMatch(role, chan, did) {
       this.ui.hidePicker(); this.pickOpen = false; this.ui.hideInvite(); this.ui.showPrompt(false);
       if (this.incoming) this.declineInvite();
+      const fromWaiting = !!(this.match && this.match.solo);
       this.match = {
         role, chan, did, me: role, op: OTHER[role],
         names: { [role]: this.myName(), [OTHER[role]]: chan.name },
@@ -257,7 +299,12 @@
         readyMe: false, oppReady: false, readyT: 0, lastHeard: performance.now(), sendT: 0,
         history: [], oppLastFire: -9, rounds: 0, over: false, result: null,
       };
-      this.game.beginDuel();
+      if (fromWaiting) {
+        // already in the arena: rebuild it with the opponent and start from round 1
+        this.enterArena();
+        this.ui.feed(VR.t('du.found', { name: chan.name }), 'good');
+        VR.Audio.play('gem');
+      } else this.game.beginDuel();
     }
 
     /** game.js: the screen is black, build the arena and hand over. */
@@ -268,6 +315,14 @@
       this.buildWorld();
       VR.Input.setMode('fp'); VR.Input.setFPEnabled(true); VR.Input.requestLock();
       this.ui.show(true);
+      this.ui.setSolo(!!m.solo);
+      if (m.solo) {
+        this.ui.hideBig(); this.ui.setHP(D.HP);
+        this.resetMe();
+        m.phase = 'practice';
+        this.updateWaitText(true);
+        return;
+      }
       const col = VR.DuelArena.COLORS;
       this.ui.setPlayers(m.names[m.me], m.names[m.op], col[m.me], col[m.op], D.FIRST_TO);
       this.ui.setScore(0, 0); this.ui.setHP(D.HP);
@@ -296,7 +351,7 @@
       sc.add(new T.HemisphereLight(L.ambient.sky, L.ambient.ground, L.ambient.intensity * 2.2));
       const sun = new T.DirectionalLight(L.sun.color, L.sun.intensity * 2); sun.position.set(...L.sun.dir); sc.add(sun);
       this.solidBoxes = L.solids.map(s => new T.Box3(new T.Vector3(...s.min), new T.Vector3(...s.max)));
-      this.buildAvatar();
+      if (!this.match.solo) this.buildAvatar();
       this.nades = [];
       this.camera.fov = this.baseFov(); this.camera.updateProjectionMatrix();
       this.game.renderer.compile(sc, this.camera);
@@ -445,6 +500,7 @@
     }
     forfeit() {
       const m = this.match; if (!m) return;
+      if (m.solo) { this.ui.closeOverlay(); m.result = { win: null, reward: 0 }; return this.leave(); }
       this.send({ k: 'bye' });
       if (m.over) return this.leave();
       m.over = true; m.phase = 'over';
@@ -482,6 +538,8 @@
     /** game.js: the screen is black again; tear the arena down. */
     exit() {
       this.clearWorld();
+      if (this.pending && this.pending.auto) { this.pending.chan.send({ k: 'cancel', did: this.pending.did }); this.pending = null; }
+      this.ui.setSolo(false);
       this.ui.show(false); this.ui.resetTouch();
       VR.Input.setMode('runner');
       this.match = null;
@@ -498,7 +556,7 @@
       if (m.over) return;
       if (this.ui.modal) { this.ui.closeOverlay(); VR.Input.setFPEnabled(true); VR.Input.requestLock(); return; }
       VR.Input.setFPEnabled(false); VR.Input.releaseLock();
-      this.ui.showPause(() => { this.ui.closeOverlay(); VR.Input.setFPEnabled(true); VR.Input.requestLock(); }, () => this.forfeit());
+      this.ui.showPause(() => { this.ui.closeOverlay(); VR.Input.setFPEnabled(true); VR.Input.requestLock(); }, () => this.forfeit(), !!m.solo);
     }
 
     // ================================================================ combat
@@ -541,7 +599,7 @@
 
     fire() {
       const m = this.match;
-      if (m.phase !== 'fight') return;
+      if (m.phase !== 'fight' && m.phase !== 'practice') return;
       if (this.weapon === 'nade') return this.throwNade();
       if (this.switchT > 0 || this.boltT > 0 || this.reloadT > 0) return;
       if (this.ammo <= 0) return this.startReload();
@@ -551,13 +609,13 @@
       if (spread) { d.x += (Math.random() - 0.5) * spread * 2; d.y += (Math.random() - 0.5) * spread * 2; d.z += (Math.random() - 0.5) * spread * 2; d.normalize(); }
       // what I see: the avatar where it is drawn
       const a = this.avatar;
-      const res = this.trace(o, d, [this.boxesAt(a.pos, a.low)]);
+      const res = this.trace(o, d, a ? [this.boxesAt(a.pos, a.low)] : []);
       const muzzle = this.muzzleWorld();
       this.fx.tracer(muzzle, res.end); this.fx.flash(muzzle); if (!res.hit) this.fx.puff(res.end);
       this.kick = 1; this.shake = Math.max(this.shake, 0.06);
       VR.Audio.play('sniper');
       this.send({ k: 'fire', o: o.toArray().map(r2), d: d.toArray().map(r4) });
-      if (m.role === 'h') this.applyShot(m.me, res.hit);
+      if (m.role === 'h' && !m.solo) this.applyShot(m.me, res.hit);
       if (this.ammo <= 0) setTimeout(() => { if (this.match === m && this.ammo <= 0) this.startReload(); }, D.BOLT * 600);
     }
     muzzleWorld() {
@@ -629,7 +687,7 @@
     // ---- impulse grenade
     throwNade() {
       const m = this.match;
-      if (m.phase !== 'fight' || this.charges < 1) return;
+      if ((m.phase !== 'fight' && m.phase !== 'practice') || this.charges < 1) return;
       this.charges--;
       if (this.rechargeT <= 0) this.rechargeT = D.NADE_RECHARGE;
       const o = this.eyePos(new T.Vector3()), d = this.aimDir(new T.Vector3());
@@ -672,7 +730,7 @@
       this.fx.wave(p);
       VR.Audio.play('burst');
       const m = this.match;
-      if (m && (m.phase === 'fight')) this.impulse(p);
+      if (m && (m.phase === 'fight' || m.phase === 'practice')) this.impulse(p);
     }
     /** Push me away from a blast. Under the feet = rocket jump. No damage. */
     impulse(p) {
@@ -705,9 +763,12 @@
     tick(dt) {
       VR.Online.setProfile(this.myName(), this.myChar());
       const why = this.busyReason('online');
-      VR.Online.setStatus(why ? 'busy' : 'free', why);
+      if (this.match && this.match.solo) VR.Online.setStatus('wait', '');
+      else VR.Online.setStatus(why ? 'busy' : 'free', why);
       VR.Online.update(dt);
-      if (this.pending) {
+      if (this.pending && this.pending.auto) {
+        if (performance.now() > this.pending.until) this.endPending('timeout');
+      } else if (this.pending) {
         this.pending.left = (this.pending.until - performance.now()) / 1000;   // real seconds
         this.ui.showWaiting(this.pending.chan.name, this.pending.left, D.INVITE_TIME, () => this.cancelInvite());
         if (this.pending.left <= 0) { this.pending.chan.send({ k: 'cancel', did: this.pending.did }); this.endPending('timeout'); }
@@ -721,15 +782,25 @@
         else this.ui.showInvite(this.incoming.name, this.incoming.left, D.INVITE_TIME, () => this.acceptInvite(), () => this.declineInvite());
       }
       const m = this.match;
-      if (m && !m.over && m.phase !== 'enter' && performance.now() - m.lastHeard > D.LOST_AFTER * 1000) this.onOppLeft();
+      if (m && m.solo) { if (this.game.state === 'duel') { this.matchmake(dt); this.updateWaitText(); } return; }
+      // until the opponent's first message (they may still be loading the arena) allow 25 s
+      if (m && !m.over && m.phase !== 'enter' && performance.now() - m.lastHeard > (m.heard ? D.LOST_AFTER : 25) * 1000) this.onOppLeft();
+    }
+
+    updateWaitText(force) {
+      this.waitTextT = (this.waitTextT || 0) - 1;
+      if (!force && this.waitTextT > 0) return;
+      this.waitTextT = 30;
+      const n = VR.Online.list().length;
+      this.ui.setWaitText(VR.t('du.lobbyTitle'), VR.Online.connected ? VR.t('du.lobbyOnline', { n }) : VR.t('du.lobbyConnecting'), VR.t('du.lobbySub'));
     }
 
     /** Arena frame (game state 'duel'). */
     update(dt) {
       const m = this.match; if (!m || !this.level) return;
       const c = this.ctrl, L = this.level;
-      const canMove = m.phase === 'fight' && !this.ui.modal;
-      const canLook = (m.phase === 'fight' || m.phase === 'count') && !this.ui.modal;
+      const canMove = (m.phase === 'fight' || m.phase === 'practice') && !this.ui.modal;
+      const canLook = (m.phase === 'fight' || m.phase === 'count' || m.phase === 'practice') && !this.ui.modal;
 
       // timers
       this.boltT = Math.max(0, this.boltT - dt);
