@@ -123,5 +123,5 @@
     }
   }
 
-  VR.Net = { Link, cleanCode, validCode, relayList };
+  VR.Net = { Link, cleanCode, validCode, relayList, randomCode, PREFIX };
 })();

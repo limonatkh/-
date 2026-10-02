@@ -83,6 +83,8 @@
       this.sinceSpecial = 0;
       this.gates = [];
       this.nextGateChunk = C.MISSION_GATE_FIRST_CHUNK;
+      this.duelGates = [];
+      this.nextDuelChunk = 3;
     }
 
     currentBiomeKey() { return this.biomeOrder[this.biomeIdx % this.biomeOrder.length]; }
@@ -166,6 +168,7 @@
       for (const c of plan.gems) this.collect.spawnGem(c.x * LW, c.y, z0 - c.z, idx);
       for (const p of plan.powerups) this.collect.spawnPowerUp(p.type, p.x * LW, p.y, z0 - p.z, idx);
       this.maybeSpawnGate(chunk, plan, style, z0);
+      this.maybeSpawnDuelGate(chunk, style, z0);
 
       this.chunks.push(chunk);
       return chunk;
@@ -220,6 +223,23 @@
       }
       this.nextGateChunk = chunk.id + C.MISSION_GATE_GAP_MIN + ((Math.random() * (C.MISSION_GATE_GAP_MAX - C.MISSION_GATE_GAP_MIN + 1)) | 0);
     }
+    /* 1v1 gate: on a platform beside the track (never in a lane), so it
+     * never changes the run itself; only its prompt starts a challenge.
+     * Uses Math.random so a seeded challenge track stays identical. */
+    maybeSpawnDuelGate(chunk, style, z0) {
+      chunk.duelGates = [];
+      if (!this.duelGateProvider || chunk.id < this.nextDuelChunk || style !== 'normal') return;
+      if (!this.duelGateProvider()) { this.nextDuelChunk = chunk.id + 2; return; }
+      const side = Math.random() < 0.5 ? -1 : 1;
+      const key = 'duelgate_' + VR.lang;
+      if (!this.pool.has(key)) this.pool.define(key, () => VR.buildDuelGate());
+      const obj = this.pool.get(key);
+      const x = side * 6.9, z = z0 - 20;
+      obj.position.set(x, 0, z);
+      const gate = { x, z, side, parts: [obj], chunk: chunk.id };
+      chunk.duelGates.push(gate); this.duelGates.push(gate);
+      this.nextDuelChunk = chunk.id + 7 + ((Math.random() * 5) | 0);
+    }
     gateObject(def) {
       const key = 'gate_' + def.id + '_' + VR.lang;            // the sign is drawn in the current language
       if (!this.pool.has(key)) this.pool.define(key, () => VR.buildMissionGate(def));
@@ -227,6 +247,13 @@
     }
     /** Language changed: swap every gate on the track for one with the new sign. */
     relabelGates() {
+      for (const g of this.duelGates || []) {
+        const old = g.parts[0]; const pos = old.position.clone();
+        this.pool.release(old);
+        const key = 'duelgate_' + VR.lang;
+        if (!this.pool.has(key)) this.pool.define(key, () => VR.buildDuelGate());
+        const obj = this.pool.get(key); obj.position.copy(pos); g.parts[0] = obj;
+      }
       for (const g of this.gates) {
         const def = VR.MISSIONS.find(d => d.id === g.missionId); if (!def) continue;
         const old = g.parts[0]; const pos = old.position.clone();
@@ -240,6 +267,10 @@
         const m = VR.gateCurtainMat; m.map.offset.y -= dt * 0.35; m.opacity = 0.78 + Math.sin(performance.now() * 0.004) * 0.08;
       }
       for (const g of this.gates) { const sp = g.parts[0].userData.spinner; if (sp) sp.rotation.y += dt * 1.6; }
+      if (this.duelGates && this.duelGates.length) {
+        const m = VR.duelGateCurtain(); m.map.offset.y += dt * 0.5;
+        for (const g of this.duelGates) { const sp = g.parts[0].userData.spinner; if (sp) sp.rotation.y += dt * 1.2; }
+      }
     }
 
     addObstacle(chunk, o) { o.chunk = chunk.id; chunk.obstacles.push(o); this.obstacles.push(o); }
@@ -252,6 +283,8 @@
       this.collect.releaseChunk(chunk.id);
       for (const g of chunk.gates || []) { for (const p of g.parts) this.pool.release(p); }
       if (chunk.gates && chunk.gates.length) this.gates = this.gates.filter(g => !chunk.gates.includes(g));
+      for (const g of chunk.duelGates || []) { for (const p of g.parts) this.pool.release(p); }
+      if (chunk.duelGates && chunk.duelGates.length) this.duelGates = this.duelGates.filter(g => !chunk.duelGates.includes(g));
       this.chunks.splice(this.chunks.indexOf(chunk), 1);
     }
 
@@ -281,6 +314,7 @@
       for (const c of this.chunks) { c.z0 += dz; for (const p of c.parts) p.position.z += dz; }
       for (const o of this.obstacles) { o.z += dz; for (const p of o.parts) p.position.z += dz; }
       for (const g of this.gates) { g.z += dz; for (const p of g.parts) p.position.z += dz; }
+      for (const g of this.duelGates) { g.z += dz; for (const p of g.parts) p.position.z += dz; }
       this.collect.shift(dz);
     }
 

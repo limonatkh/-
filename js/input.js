@@ -22,13 +22,14 @@
     ArrowRight: 'right', KeyD: 'right',
     ArrowUp: 'jump', KeyW: 'jump', Space: 'jump',
     ArrowDown: 'slide', KeyS: 'slide',
+    KeyE: 'interact',                    // 1v1 gate beside the track
   };
 
   // ---- first-person bindings -----------------------------------------
   const FP_ACTIONS = {
     Space: 'jump', KeyC: 'slide', ControlLeft: 'slide', ControlRight: 'slide',
     KeyE: 'interact', KeyF: 'interact', KeyQ: 'burst',
-    KeyJ: 'journal', Tab: 'journal',
+    KeyJ: 'journal', Tab: 'journal', KeyR: 'reload',
     Digit1: 'slot1', Digit2: 'slot2', Digit3: 'slot3',
   };
   const FP_HOLD = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyC', 'ControlLeft', 'ControlRight', 'ShiftLeft']);
@@ -69,6 +70,14 @@
     if (locked()) { look.x += e.movementX; look.y += e.movementY; }
     else if (dragLook) { look.x += e.clientX - lastMX; look.y += e.clientY - lastMY; lastMX = e.clientX; lastMY = e.clientY; }
   });
+  // mouse buttons (1v1 arena): left = fire while the mouse is captured, right = aim/scope
+  window.addEventListener('mousedown', (e) => {
+    if (mode !== 'fp' || !fpEnabled) return;
+    if (e.button === 0 && locked()) fpQueue.push('fire');
+    if (e.button === 2) touchHold.add('aim');
+  });
+  window.addEventListener('mouseup', (e) => { if (e.button === 2) touchHold.delete('aim'); });
+  window.addEventListener('contextmenu', (e) => { if (mode === 'fp') e.preventDefault(); });
   window.addEventListener('wheel', (e) => {
     if (mode === 'fp' && fpEnabled) fpQueue.push(e.deltaY > 0 ? 'slotNext' : 'slotPrev');
   }, { passive: true });
@@ -158,6 +167,7 @@
       const l = Math.hypot(x, y);
       return l > 1 ? { x: x / l, y: y / l } : { x, y };
     },
+    aimHeld() { return touchHold.has('aim'); },
     crouchHeld() { return held.has('KeyC') || held.has('ControlLeft') || held.has('ControlRight') || touchHold.has('crouch'); },
     takeLook() { const r = { x: look.x, y: look.y }; look.x = look.y = 0; return r; },
     nextAction() { return fpQueue.shift(); },

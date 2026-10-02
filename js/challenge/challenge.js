@@ -310,6 +310,9 @@
           if (m.r !== this.round) break;
           this.onOppDead(m);
           break;
+        case 'duel':
+          this.game.duel.onFriendMessage(m.d);
+          break;
         case 'again':
           if (m.r !== this.round) break;
           o.again = true;

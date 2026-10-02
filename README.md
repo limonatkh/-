@@ -347,6 +347,56 @@ The room code's last digit picks the relay, so both players use the same one. Te
 run any MQTT broker with WebSockets and add `?relay=ws://127.0.0.1:8899` to the URL
 (the invite link keeps this parameter).
 
+## 1v1 Sniper Arena (ساحة القنص)
+
+A live first-person duel between two players, started from the road. Missions and the race
+mode are untouched; the duel reuses their systems (first-person controller, hands, voxel
+level builder, run snapshot/restore, fade + countdown, the relay link).
+
+**On the road.** A purple 1v1 gate stands on a platform *beside* the track (never in a lane).
+While it is ahead, the prompt **E — Challenge a player** (a button on touch screens) appears.
+Nothing happens unless the player presses it. Then only this runner is frozen and the picker opens:
+
+- **Friend in your room**: your challenge-room friend, over the room link.
+- **Online now**: everyone playing right now (Settings → *Online challenges*, on by default).
+  Busy players are shown with the reason (in a mission / duel / race) and can't be invited.
+
+**Invite.** The other player gets a small pop-up: name, mode, **Accept / Decline**, 12 s timer
+(keys Y / N). Declined or unanswered invites put that player on a 15 s cooldown; while waiting
+the inviter sees the timer and **Cancel**. Refused, timed out or cancelled → back to the run (3-2-1).
+
+**Match.** Both runs are saved; the TPP→FPV transition plays; the arena loads.
+Rounds: 3-2-1, fight, 45 s, **first to 5**. Kill or higher health at time-out wins the round
+(equal health = draw, no point). ROUND WON / LOST, short freeze, next round.
+
+| | |
+|---|---|
+| Sniper | head 100 (kill), body 55 · 1 s bolt · 5 rounds, 1.9 s reload · right-click scope (FOV 32) · small hip-fire spread |
+| Impulse grenade | **no damage**: pushes everyone in 3.8 m; under your feet = rocket jump · 2 charges, 3.2 s recharge each |
+| Controls | mouse aim · left click fire · right click scope · Q grenade · 1/2 switch · R reload · Space jump · C slide |
+| Arena | 46 × 23 m (26 × 13 PH), 11 m walls + invisible caps, 2 m floor grid, cover in 180° rotational symmetry |
+
+**Referee (host-authoritative).** There is no game server, so the *inviter's* game decides:
+it checks every guest shot (fire rate, origin near the guest, walls in the way, the host's
+positions over the last 300 ms for lag) and owns health, rounds and score. The guest only
+shows what the host sends, so a player can't change the result on their own device.
+Grenade pushes are applied by each player to themselves (they never damage).
+
+**Return.** Result card (winner, loser, score, rounds, coins: +150 win / +30 loss), then
+each runner is restored exactly where they were (3-2-1 + short star). If a player leaves or
+disconnects (no message for 7 s), the other wins and returns; the arena is torn down.
+
+| Piece | File |
+|---|---|
+| Presence + private inbox on the relay | `js/duel/online.js` |
+| Invites, rounds, combat, referee, return | `js/duel/duel.js` |
+| HUD, picker, invite pop-up, touch controls | `js/duel/duelui.js` |
+| Arena geometry | `js/duel/arena.js` |
+| Rifle / grenade models, tracers, push wave | `js/duel/weapons.js` |
+| Road gate model | `js/duel/gate.js` (spawned by `world.maybeSpawnDuelGate`) |
+
+Tuning numbers are in `VR.DUEL` at the top of `duel.js`.
+
 ## Performance notes
 
 - Every model is built once and pooled (`VR.Pool`); spawned objects share

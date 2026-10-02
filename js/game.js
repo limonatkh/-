@@ -14,7 +14,7 @@
   class Game {
     constructor() {
       this.state = 'loading';
-      this.settings = Object.assign({ sfx: true, music: true, quality: 'high', fps: false }, UI.store.get('settings', {}));
+      this.settings = Object.assign({ sfx: true, music: true, quality: 'high', fps: false, online: true }, UI.store.get('settings', {}));
       this.best = UI.store.get('best', 0);
       this.bank = UI.store.get('bank', 0);
       this.charIndex = Math.max(0, VR.CHARACTERS.findIndex(c => c.id === UI.store.get('character', 'pip')));
@@ -30,6 +30,9 @@
       // no mission gates in a challenge: both players must run the same track
       this.world.gateProvider = () => (this.challenge && this.challenge.inRace ? null : this.missions.nextForGate());
       this.challenge = new VR.Challenge(this);
+      // 1v1 Sniper Arena: gates beside the track, invites, the arena itself
+      this.duel = new VR.DuelManager(this);
+      this.world.duelGateProvider = () => this.duel.gateAvailable();
       this.fade = { value: 0, target: 0, speed: 3 };
       this.fadeEl = document.getElementById('fade');
       this.countdownEl = document.getElementById('countdown');
@@ -77,6 +80,7 @@
       this.camera.fov = this.portrait ? 70 : C.CAMERA_FOV;
       this.camera.updateProjectionMatrix();
       if (this.missions) this.missions.resize(w, h);
+      if (this.duel) this.duel.resize(w, h);
     }
 
     applySettings() {
@@ -91,6 +95,8 @@
       UI.setToggle('optMusic', s.music);
       UI.setToggle('optQuality', s.quality === 'high', VR.t('high'), VR.t('low'));
       UI.setToggle('optFps', s.fps);
+      UI.setToggle('optOnline', s.online);
+      if (this.duel) VR.Online.setEnabled(!!s.online);
       const lb = document.getElementById('optLang');
       lb.textContent = VR.I18N.NAMES[VR.lang]; lb.lang = VR.lang;
       UI.fps(s.fps);
@@ -132,6 +138,7 @@
       });
       UI.bind('optQuality', () => { this.settings.quality = this.settings.quality === 'high' ? 'low' : 'high'; this.applySettings(); });
       UI.bind('optFps', () => { this.settings.fps = !this.settings.fps; this.applySettings(); });
+      UI.bind('optOnline', () => { this.settings.online = !this.settings.online; this.applySettings(); });
       UI.bind('optLang', () => { VR.I18N.toggle(); });
       VR.I18N.onChange((lang, fontsReady) => {
         this.settings.lang = lang;
@@ -142,6 +149,8 @@
         if (fontsReady) this.world.relabelGates();
       });
       VR.Input.onPause(() => {
+        if (this.state === 'duel') return this.duel.onPauseKey();
+        if (this.state === 'duelPick' || this.state === 'duelEnter' || this.state === 'duelReturn') return;
         if (this.state === 'mission') this.missions.onPauseKey();
         else if (this.state === 'playing') this.pause(); else if (this.state === 'paused') this.resume();
       });
@@ -165,7 +174,8 @@
       this.state = s;
       const map = { menu: 'menu', character: 'character', settings: 'settings', paused: 'pause', gameover: 'gameover', playing: null, loading: 'loading', challenge: 'challenge', chresult: 'chresult' };
       UI.show(map[s]);
-      UI.hud(s === 'playing' || s === 'paused' || s === 'dying' || s === 'gateEnter' || s === 'countdown');
+      UI.hud(s === 'playing' || s === 'paused' || s === 'dying' || s === 'gateEnter' || s === 'countdown' || s === 'duelPick' || s === 'duelEnter');
+      if (s !== 'playing' && this.duel) this.duel.ui.showPrompt(false);
       VR.Input.setEnabled(s === 'playing');
       if (s === 'menu') UI.menuStats(this.best, this.bank);
       if (s === 'character') {
@@ -234,6 +244,7 @@
     pause() { if (this.state !== 'playing') return; this.setState('paused'); VR.Audio.setMusicVolume(0.3); }
     resume() { this.setState('playing'); this.clock.getDelta(); VR.Audio.setMusicVolume(1); }
     toMenu() {
+      if (this.duel.match || this.duel.pending || this.duel.pickOpen) this.duel.abort();
       if (this.challenge.active) this.challenge.leave(false);
       if (this.missions.active) this.missions.abort();
       this.fade.value = this.fade.target = 0; this.updateFade(0);
@@ -429,6 +440,70 @@
       }
     }
     quitFromMission() { this.toMenu(); }
+
+    /* ==============================================================
+     * 1v1 DUEL — same idea as a mission gate: save the run, eyes-in
+     * camera + fade, the arena runs, then restore the run exactly.
+     * ============================================================ */
+    /** Closing the picker / a refused invite: 3-2-1, then run again. */
+    resumeAfterPause() {
+      this.countdown = 3; this.countdownStar = 0;
+      this.countdownEl.hidden = false; this.countdownEl.textContent = '3';
+      this.setState('countdown');
+    }
+    beginDuel() {
+      const st = this.state;
+      this.duelFromRun = st === 'playing' || st === 'paused' || st === 'duelPick';
+      this.duelCam = st === 'playing' || st === 'duelPick';
+      if (this.duelFromRun) this.runSnapshot = this.snapshotRun();
+      this.gateT = 0;
+      this.gateFrom = this.camera.position.clone();
+      this.gateLookFrom = this.camLook.clone();
+      this.setState('duelEnter');
+      VR.Audio.play('portal'); VR.Audio.setMusicVolume(0.25);
+    }
+    updateDuelEnter(dt) {
+      this.gateT += dt;
+      if (this.duelCam) {
+        const p = this.player;
+        const k = Math.min(1, this.gateT / 0.3), e = k * k * (3 - 2 * k);
+        this.camera.position.lerpVectors(this.gateFrom, new THREE.Vector3(p.x, p.y + 1.5, p.z - 0.2), e);
+        this.camLook.lerpVectors(this.gateLookFrom, new THREE.Vector3(p.x, p.y + 1.45, p.z - 10), e);
+        this.camera.lookAt(this.camLook);
+        this.camera.fov = (this.portrait ? 70 : C.CAMERA_FOV) + e * 30; this.camera.updateProjectionMatrix();
+        p.rig.root.visible = this.gateT < 0.22;
+      }
+      if (this.gateT > 0.12) this.fade.target = 1;
+      if (this.gateT >= 0.5 && this.fade.value >= 0.99) {
+        this.resize();
+        this.player.rig.root.visible = true;
+        this.setState('duel');
+        this.duel.enterArena();
+        this.fade.target = 0;
+      }
+    }
+    onDuelReturn(result) {
+      this.duelResult = result;
+      this.setState('duelReturn');
+      this.fade.target = 1;
+      VR.Audio.play('portal');
+    }
+    updateDuelMode(dt) {
+      this.duel.update(dt);
+      if (this.state === 'duelReturn' && this.fade.value >= 0.99) {
+        this.duel.exit();
+        const r = this.duelResult || {};
+        if (this.duelFromRun && this.runSnapshot) {
+          this.restoreRun(this.runSnapshot, null);
+          this.runSnapshot = null;
+          this.countdown = C.MISSION_RETURN_COUNTDOWN; this.countdownStar = C.MISSION_RETURN_STAR;
+          this.countdownEl.hidden = false; this.countdownEl.textContent = String(Math.ceil(this.countdown));
+          this.setState('countdown');
+        } else this.toMenu();
+        this.fade.target = 0;
+        if (r.reward) setTimeout(() => UI.toast(VR.t('du.reward', { coins: r.reward }), 1800), 300);
+      }
+    }
     updateFade(dt) {
       const f = this.fade;
       if (f.value !== f.target) {
@@ -519,9 +594,14 @@
       else if (st === 'gateEnter') this.updateGateEnter(dt);
       else if (st === 'mission' || st === 'gateReturn') this.updateMissionMode(dt);
       else if (st === 'countdown') this.updateCountdown(dt);
+      else if (st === 'duelEnter') this.updateDuelEnter(dt);
+      else if (st === 'duel' || st === 'duelReturn') this.updateDuelMode(dt);
+      else if (st === 'duelPick') this.world.animateGates(dt);
       this.challenge.update(dt);
+      this.duel.tick(dt);
       this.updateFade(dt);
       if (this.state === 'mission' || this.state === 'gateReturn') this.missions.render(this.renderer);
+      else if (this.state === 'duel' || this.state === 'duelReturn') this.duel.render(this.renderer);
       else {
         this.collect.fx.mesh.visible = true;
         this.renderer.render(this.scene, this.camera);
@@ -535,7 +615,7 @@
 
     updatePlaying(dt) {
       const p = this.player;
-      let a; while ((a = VR.Input.next())) p.action(a, this);
+      let a; while ((a = VR.Input.next())) { if (a === 'interact') this.duel.onRunnerInteract(); else p.action(a, this); }
 
       this.powerups.update(dt);
       const boost = this.powerups.active('boost');
@@ -551,6 +631,7 @@
 
       this.world.update(dt, p, this.speed, diff, this);
       this.world.animateGates(dt);
+      this.duel.roadUpdate(p);
       if (this.checkGates()) return;
       if (this.hitCooldown > 0) this.hitCooldown -= dt;
       this.resolveCollisions();
