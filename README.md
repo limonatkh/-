@@ -1,0 +1,349 @@
+# ليمونات — Endless Block Runner
+
+A complete 3D endless runner with an original voxel/block art style, built
+with **Three.js** and plain JavaScript. No build step, no image or audio
+files: every block texture, model and sound is generated in code.
+
+---
+
+## 1. Technology
+
+| Part | What it uses |
+|---|---|
+| Rendering | Three.js r158 (`lib/three.min.js`, bundled locally), WebGL |
+| Language | Plain JavaScript (ES2017), one global namespace `VR` |
+| Textures | 16×16 pixel textures painted on `<canvas>` at startup (`js/voxel.js`) |
+| Models | Boxes merged into one mesh per material (`VoxelBuilder`) |
+| Audio | WebAudio synthesiser, replaceable by real files (`js/audio.js`) |
+| UI | HTML/CSS overlay (`index.html`, `js/ui.js`) |
+| Saves | `localStorage` (best score, coin bank, settings, selected character) |
+
+## 2. How to run
+
+Any static web server works. From this folder:
+
+```bash
+python3 -m http.server 8000
+# then open http://localhost:8000
+```
+
+or `npx serve .`. Double-clicking `index.html` also works in most browsers
+because the code uses classic `<script>` tags, not ES modules.
+
+Controls: **A/D or ←/→** switch lane · **W / ↑ / Space** jump ·
+**S / ↓** slide (in the air: fast-fall) · **Esc / P** pause ·
+on phones, **swipe** in any direction.
+
+## 3. Where the player character is defined
+
+`js/character.js`
+
+- `HERO_MODEL` — your character as a voxel model, split into 6 animated parts
+  (`legL`, `legR`, `body`, `head`, `armL`, `armR`). Each part is a list of
+  boxes `[x, y, z, width, height, depth, 'colourName']` in "pixels".
+- `HERO_PALETTE` — the named colours.
+- `outline` / `noOutline` — thickness of the black cartoon ink line, and which colours skip it.
+- `VR.CHARACTERS` — the list shown in the Character menu (skins).
+- `VR.buildCharacter()` — turns a definition into a rigged 3D model.
+
+Animation (run cycle, jump pose, slide, lean, landing squash) lives in
+`js/player.js → Player.animate()`, and works on any model that uses the
+same 6 part names.
+
+## 4. Replacing / changing the character
+
+1. Open `js/character.js`.
+2. Edit the boxes in `HERO_MODEL` (or copy it to a new object) and edit the
+   boxes. Keep the six part names; pivots are the joints (hip, shoulder, neck).
+   `-Z` is the front (the face), the figure is ~21 px tall.
+3. Add a palette and register it:
+   ```js
+   VR.CHARACTERS.unshift({ id: 'hero', name: 'My Hero', tagline: 'Main character',
+                           model: MY_HERO_MODEL, palette: MY_PALETTE });
+   ```
+   The first entry is the default. Extra entries with the same model and a
+   different palette are skins.
+
+Collision size is independent of the model (`PLAYER_*` values in
+`js/config.js`), so a new look never changes gameplay.
+
+## 5. Where railway chunks are generated
+
+`js/world.js`
+
+- `World.spawnChunk()` — builds one 40 m chunk: track segment, ground,
+  scenery strips, then asks `Patterns` for the obstacles/coins.
+- `World.nextStyle()` — picks `normal`, `station`, `bridge` or a
+  two-chunk `tunnel`, weighted by biome and difficulty.
+- `World.update()` — streams chunks in ahead and recycles them behind.
+- Track segment models: `js/prefabs.js → TRACK` / `VR.TRACK_STYLES`.
+
+## 6. Where obstacles are generated
+
+`js/patterns.js`
+
+- `PATTERNS` — the chunk recipes: `coins` (A), `train` (B), `multitrain` (C),
+  `mixed` (G), `hurdles` (full-width jump/slide rows), `moving` (oncoming train).
+  Tunnels (D), bridges (E) and stations (F) are track styles that combine
+  with these recipes.
+- `verify()` — the fairness check. It simulates a player changing lanes at
+  the current speed and rejects any layout that can't be survived; the chunk
+  is regenerated. Three blocked lanes can only happen when every lane has a
+  jump or slide solution.
+- `coinTrail()` — coins follow a survivable path, arc over hurdles, run up
+  ramps onto trains, and dip under slide bars.
+
+Obstacle models and hitboxes: `js/prefabs.js → VR.OBSTACLE_TYPES`
+(barrier_low, barrier_high, minecart, hay, wall, ramp) and the train
+cars (`CARS`: loco, passenger, freight, tanker).
+
+## 7. Difficulty and speed
+
+`js/config.js`
+
+- `SPEED_START`, `SPEED_MAX`, `SPEED_RAMP` — speed eases from 13 to 31 m/s.
+- `DIFFICULTY_RAMP` — how fast difficulty (0 → 1) rises with distance.
+
+`js/game.js → speedAt()` / `difficultyAt()` apply the curves.
+Difficulty changes pattern weights (more trains, oncoming trains, walls),
+row spacing, hard-block chance and how often tunnels/bridges appear.
+
+## 8. Score system
+
+- Numbers: `js/config.js` → `POINTS_PER_METRE`, `COIN_POINTS`, `GEM_POINTS`,
+  `POWERUP_POINTS`, `MULTIPLIER_STEPS`.
+- Logic: `js/game.js` → `updateScore()` (distance × multiplier, doubled
+  during Boost), `onCoin()`, `onGem()`, `onPowerUp()`.
+- Best score and banked coins are saved in `gameOver()`.
+
+## 9. Adding a new environment (biome)
+
+Open `js/biomes.js` and add an entry to `VR.BIOMES`:
+
+```js
+jungle: {
+  name: 'Jungle', sky: 0x9fe0b0, fog: 0xbde9c8,
+  ground: { top: 'grass_top', side: 'grass_side' },
+  styleWeights: { normal: 10, bridge: 3, tunnel: 1, station: 0.5 },
+  scenery(vb, rnd) {
+    // place props on the LEFT side of a 40 m strip: x < -5, z from 0 to -40
+    VR.Props.oak(vb, -9, -12, 7, 'leaves');
+  },
+},
+```
+
+Then add `'jungle'` to `VR.BIOME_ORDER`. New block textures:
+`VR.Tex.register('vines', (ctx, rnd) => { /* paint 16×16 */ })`.
+Five scenery variants per biome are pre-built at load and mirrored for the
+right side, so there is no runtime cost.
+
+## 10. Export / build
+
+There is no build step — the folder **is** the game.
+
+- **Web**: upload the folder to any static host (GitHub Pages, Netlify,
+  Cloudflare Pages, itch.io as an "HTML" game — zip the folder).
+- **Android / iOS app**: wrap it with Capacitor (`npx cap init`, copy the
+  folder into `www/`, `npx cap add android`).
+- **Desktop app**: wrap it with Electron or Tauri, pointing at `index.html`.
+
+## Lemon theme
+
+- Textures: `lemon`, `lemon_leaves`, `lemon_icon`, `lemon_sign` in `js/voxel.js`.
+- Props: `P.lemon`, `P.lemonTree`, `P.lemonCrate` in `js/biomes.js`, placed by
+  the grassland, forest, village and desert scenery functions.
+- Stations: lemon sign board and crates in `js/prefabs.js → TRACK.station`.
+- Bonus pickup: the voxel lemon (worth 5 coins) in `js/collectibles.js`
+  (the `gems` set); its spawn chance is in `js/patterns.js → addCoins`.
+
+## Secret-code continue
+
+- `js/secrets.js` stores only salted SHA-256 fingerprints, never the codes.
+  Input is trimmed, inner spaces collapsed, and invisible Arabic marks
+  (tatweel, harakat, direction marks) removed before hashing.
+- Rules (`js/game.js → tryContinue`): only on the Game Over screen, one
+  continue per death, each code once per run. Play Again resets both.
+- The run resumes where it ended with score, distance and coins kept, plus
+  3 seconds of star power so the obstacle that ended the run is cleared.
+- **To add a code:** run `VR.SecretCodes.fingerprint('new code')` in the
+  browser console and paste the result into `FINGERPRINTS`.
+
+---
+
+# Mission mode (first-person)
+
+The runner is still the main game. Rare **mission gates** stand in one lane
+of the railway. Run through one and the game switches to a first-person
+puzzle world. When the mission ends you return to the same run.
+
+```
+Runner ──(run through a gate)──► gateEnter: runner frozen, camera moves into
+   ▲                             the character's eyes (TPP → FPV in 0.3 s), fade
+   │                                         │
+   │                              mission: intro → explore / read / solve → results
+   │                                         │
+countdown 3-2-1 ◄── gateReturn (fade) ◄──────┘  run restored + rewards added,
+then 2.5 s of star power                        player stands just past the gate
+```
+
+## Controls (missions)
+
+| Keyboard / mouse | Touch | Action |
+|---|---|---|
+| W A S D / arrows | left stick | move |
+| mouse (click to capture; drag works too) | drag on the right side | look |
+| Space | Jump | jump (also out of a slide) |
+| C / Ctrl (hold) | Crouch | crouch; tap while running to slide |
+| Q | Burst | Lemon Burst blast-jump (3.2 s cooldown) |
+| E / F | Use | interact (read, pick up, press, install…) |
+| 1 2 3 / wheel | tap a slot | choose the carried item |
+| J / Tab | journal button | clue journal, objectives, hints |
+| Esc / P | pause button | pause: resume, settings, restart, leave |
+
+The prompt under the crosshair shows the action and its kind by color and
+icon: **blue ◉ inspect/read**, **yellow ✋ collect**, **green ⚙ interact**.
+
+## Architecture (new and changed pieces)
+
+| Responsibility (from the brief) | Where it lives |
+|---|---|
+| GameModeManager | `js/game.js` states `gateEnter → mission → gateReturn → countdown`; one loop for both modes |
+| RunStatePersistence | `js/game.js` `snapshotRun()` / `restoreRun()`; the runner world is frozen, then checked (`restoreCheck`) |
+| WorldTransitionManager | `js/game.js` `enterGate()`, `updateGateEnter()`, `updateFade()`, `onMissionReturn()`, `updateCountdown()` |
+| Mission entrances | `js/world.js` `maybeSpawnGate()`, model `VR.buildMissionGate` in `js/prefabs.js`, spacing in `js/config.js` |
+| MissionManager | `js/missions/missions.js` (build world, update, render, interaction ray, pause, finish) |
+| MissionDefinition (content) | `js/missions/data.js`, pure data |
+| MissionState machine | `js/missions/framework.js` `States` + `MissionRun.go()` (illegal transitions are refused) |
+| InteractableObject / PuzzleManager | `js/missions/framework.js` `Components` + flags + `rules` |
+| ClueSystem | `js/missions/text.js` (canvas-texture writing on walls, paper, chalkboards, signs, glow paint) + the `text` component |
+| Inventory / MissionItemSystem | `MissionRun.inventory`, hotbar in the mission UI, held item shown in the hands |
+| MissionJournal | `MissionRun.journal` (filled when a clue is read) + journal screen |
+| MissionUI | `js/missions/missionui.js` (HUD, prompt, inspect, symbol lock, journal, pause, results, failure, touch controls) |
+| RewardManager | `js/missions/framework.js` `Rewards` + `Progress` (saved in localStorage) |
+| FirstPersonController | `js/missions/fpcontroller.js` (movement, collision, ladders, camera) + `HandsView` |
+| Environments | `js/missions/level.js` (`cellar`, `office`, `docks`) and props in `js/missions/models.js` |
+| Puzzle symbols | `js/missions/symbols.js` |
+| Input | `js/input.js` now has a `runner` mode and an `fp` mode. It is still one input system |
+
+**Files changed:** `index.html` (mission UI, fade, countdown, styles, scripts),
+`js/config.js` (gate spacing, `FP` movement block), `js/input.js`,
+`js/audio.js` (mission sounds + `VR.Audio.define`), `js/world.js`,
+`js/prefabs.js`, `js/game.js`.
+**New:** everything in `js/missions/`.
+
+### Movement spec mapping (`CONFIG.FP`)
+
+| Spec | Value used |
+|---|---|
+| speed 15–20 units/s | 17 units/s. A unit is player height / 5 (≈ 6 m/s) |
+| most speed within 0.15–0.3 s | 82% at 0.15 s, 97% at 0.3 s; a little momentum when keys are released |
+| jump 1–1.5 player heights, 0.5–0.8 s airborne | 1.2 player heights, 0.65 s, limited air control, frame-rate independent |
+| slide 0.4–0.8 s, keeps speed, can jump out | 0.6 s, starts at 115% and ends at 60% of speed, then keeps moving, slide → jump |
+| blast jump 3–4× height, 70–80°, 2.5–4 s cooldown | Lemon Burst: 3.5×, 80° standing / 70° moving, 3.2 s |
+| FOV 90–105 | 95° default, adjustable 90–105 in the pause menu |
+| arena proportions | corridors 2.2 m, low cover 1.2 m, containers 2.6 m, stacks 5.2 m |
+
+Not built from the attached spec, since the puzzle missions don't need them:
+weapons, shooting, health, Duels/2v2 rounds, the shooting range and the lobby.
+The component/state design leaves room for them.
+
+## The three missions
+
+1. **The Wall Message** (cellar). Read *"THE ANSWER IS HIDDEN WHERE THE LIGHT NEVER REACHES."*,
+   find the unlit strip behind the shelves (crouch under the low gap), read the glow-painted
+   signs, set the chest's three symbol dials, take the Golden Lemon. Bonus: 3 hidden lemons.
+2. **The Three Messages** (office). Messages A, B and C. Two of the five shelf objects are silent,
+   and each hides a note. Message A rules out place 1. Message C says to press the signs in the
+   written order, not by their numbers. The panel then opens a hidden wall compartment.
+   Bonus: no mistakes.
+3. **Restore the Power** (docks). Find the fuse, the copper coil (end of the container
+   corridor) and the lemon cell (top of the stack; ladder or Lemon Burst). Signs say which
+   socket each part belongs in, and the lamps show green or red. Pull the lever and leave
+   through the gate. Bonus: under 3:00.
+
+Missions unlock in order (`requires`). After all three are done, gates offer replays,
+which pay only the explicitly configured `repeatReward`. First-completion rewards,
+bonus rewards and achievements are saved and granted once.
+
+## How to test the missions
+
+* Play normally. The first gate appears about 250 m in, then one every 640–960 m. A
+  "Mission gate ahead!" toast warns you. Steer into its lane.
+* Shortcuts in the browser console while a run is going:
+  * `VR.game.enterGate({ missionId: 'm2' })` jumps straight into mission 2.
+  * `localStorage.removeItem('cubeexpress.missions')` resets mission progress.
+  * `VR.game.missions.run.flags` shows the current puzzle state.
+
+## Adding a mission
+
+1. Add an object to `VR.MISSIONS` in `js/missions/data.js` (fields are documented
+   at the top of that file). Give it a new `id`, an `order`, and `requires` if it
+   should unlock after another mission.
+2. Pick an `environment` (`cellar`, `office`, `docks`), or build a new one in
+   `js/missions/level.js`: a function that returns a `Level` with boxes, props,
+   lights, a `spawn` and named `anchor()`s, registered in `VR.MissionEnvironments`.
+3. Place `entities` on the anchors. Most puzzles combine the existing components:
+
+```js
+{ id: 'sign', type: 'text', at: 'someWall', style: 'paint', size: 0.3, width: 4,
+  title: 'Scratched message', text: 'COUNT THE {star} ON THE DOOR' },
+{ id: 'box', type: 'symbolLock', at: 'chestSpot', symbols: ['star','moon','sun'],
+  solution: ['sun','sun','star'], opens: 'box_open' },
+{ id: 'prize', type: 'item', at: 'chestSpot', offset: [0, 0.5, 0], item: 'key',
+  name: 'Brass Key', model: 'goldenLemon', showWhen: 'box_open' },
+```
+
+   Then set `objectives` (steps that are done when their flags are set),
+   `success: 'got_key'`, and optionally `secondary`, `timeLimit`, `hints` and
+   `rules: [{ when: ['a','b'], set: 'c', say: 'Something clicked.' }]`.
+4. New puzzle mechanics: add a component to `VR.Missions.Components` in
+   `framework.js`. A component is `build(def, ctx)` returning
+   `{ obj, hit, kind, prompt(), use(run), update(dt, run), sync(run) }`.
+   Set flags with `run.setFlag()`, and everything else reacts to them.
+5. New puzzle symbols: `VR.Symbols.add('key', [...16 rows of pixel art...])`.
+
+## Language (Arabic / English)
+
+Settings → Language switches the whole game live and remembers the choice.
+The default is Arabic.
+
+* `js/i18n.js` holds every interface string in both languages (`VR.t('key')`).
+  Static HTML uses `data-i18n="key"`. Arabic mode sets `dir="rtl"` and
+  uses the Reem Kufi and Tajawal fonts.
+* Mission content in `js/missions/data.js` is bilingual: any text field is
+  `{ en: '…', ar: '…' }` (read with `VR.L(value)`). This covers writing on the
+  walls and signs, which is redrawn in the chosen language.
+* Puzzles do not depend on the language. Solutions are symbols, and a row of
+  symbols is read in the language's own direction, so the answer is the same.
+* Mission gate signs on the railway are redrawn when the language changes.
+* To add a language, add a table to `STRINGS` in `i18n.js` and a field for it in
+  the mission data.
+
+## Performance notes
+
+- Every model is built once and pooled (`VR.Pool`); spawned objects share
+  geometry and materials.
+- Coins, gems and sparkles are `InstancedMesh` (one draw call each).
+- Whole trains/trees/track segments are merged into 1–3 meshes.
+- No real-time shadows (a blob shadow under the player), no post-processing.
+- Draw distance is 6 chunks on High, 4 on Low (Settings → Graphics).
+- The world is shifted back to the origin every 600 m for float precision
+  on very long runs.
+
+## Replacing sounds
+
+```js
+VR.Audio.useFile('coin', 'sounds/coin.mp3');   // any name from SYNTH in audio.js
+VR.Audio.useMusicFile('sounds/theme.mp3');
+```
+
+## Extending
+
+| Feature | Where |
+|---|---|
+| New power-up | `CONFIG.POWERUPS`, icon in `prefabs.js ICONS`, effect via `game.powerups.active('id')` |
+| New obstacle | `VR.OBSTACLE_TYPES` in `prefabs.js`, then use it in a pattern |
+| New pattern | `PATTERNS` in `patterns.js` (the fairness check applies automatically) |
+| Missions / achievements | hook into `Game.onCoin`, `onPowerUp`, `gameOver` |
+| Leaderboards | send `this.score` from `Game.gameOver()` |
+| Shop / unlocks | `game.bank` already stores lifetime coins |

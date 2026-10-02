@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>ليمونات</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Chakra+Petch:wght@500;700&family=Reem+Kufi:wght@500;700&family=Tajawal:wght@400;500;700&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: #0e111a;
+    --panel: #232a3b;
+    --panel-2: #2e3750;
+    --text: #f4f1e6;
+    --muted: #a9b2c8;
+    --gold: #ffc93c;
+    --gold-dark: #d98e12;
+    --grass: #5fae3a;
+    --grass-dark: #3f8a2b;
+    --dirt: #8a5a33;
+    --dirt-dark: #6b4526;
+    --stone: #7c7f86;
+    --stone-dark: #585b62;
+    --danger: #e5433a;
+    --display: 'Pixelify Sans', 'Reem Kufi', 'Courier New', monospace;
+    --arabic: 'Reem Kufi', 'Pixelify Sans', 'Segoe UI', Tahoma, sans-serif;
+    --lemon: #ffe14a;
+    --lemon-dark: #d9a90f;
+    --leaf: #3f8a2b;
+    --body: 'Chakra Petch', 'Trebuchet MS', system-ui, sans-serif;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; background: #8fd3ff; overflow: hidden; }
+  body { font-family: var(--body); color: var(--text); -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  #game { position: fixed; inset: 0; touch-action: none; }
+  #game canvas { display: block; width: 100%; height: 100%; }
+
+  /* ---------- shared block styles ---------- */
+  .panel {
+    background: var(--panel);
+    border: 3px solid var(--ink);
+    box-shadow: inset 0 3px 0 rgba(255,255,255,.1), inset 0 -5px 0 rgba(0,0,0,.35), 0 5px 0 rgba(0,0,0,.35);
+  }
+  .btn {
+    font-family: var(--display); font-weight: 700; font-size: 20px; letter-spacing: .06em;
+    color: var(--text); cursor: pointer; position: relative;
+    border: 3px solid var(--ink); padding: 12px 22px 14px; min-width: 180px;
+    background: var(--stone);
+    box-shadow: inset 0 3px 0 rgba(255,255,255,.22), inset 0 -6px 0 var(--stone-dark), 0 5px 0 var(--ink);
+    text-shadow: 2px 2px 0 rgba(0,0,0,.45);
+    transition: transform .06s;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:active { transform: translateY(4px); box-shadow: inset 0 3px 0 rgba(255,255,255,.22), inset 0 -3px 0 var(--stone-dark), 0 1px 0 var(--ink); }
+  .btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+  /* primary = a grass block */
+  .btn.primary {
+    font-size: 30px; padding: 16px 30px 18px; min-width: 240px;
+    background:
+      linear-gradient(var(--grass) 0 11px, transparent 11px),
+      repeating-linear-gradient(90deg, var(--grass) 0 6px, transparent 6px 12px) 0 11px / 100% 5px no-repeat,
+      var(--dirt);
+    box-shadow: inset 0 3px 0 rgba(255,255,255,.25), inset 0 -6px 0 var(--dirt-dark), 0 6px 0 var(--ink);
+  }
+  .btn.small { font-size: 16px; min-width: 0; padding: 8px 14px 10px; }
+  .coin-ico {
+    display: inline-block; width: 18px; height: 18px; flex: none;
+    background: var(--gold); border: 2px solid var(--gold-dark);
+    box-shadow: inset 3px 3px 0 #fff0a8, inset -3px -3px 0 var(--gold-dark);
+    image-rendering: pixelated;
+  }
+
+  /* ---------- screens ---------- */
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding-inline: 16px; box-sizing: border-box; }
+  .screen.dim { background: rgba(14,17,26,.55); }
+  .title {
+    font-family: var(--display); font-weight: 700; line-height: .9; text-align: center; margin: 0;
+    font-size: clamp(46px, 11vw, 96px); letter-spacing: .02em; color: #fff;
+    text-shadow: 0 5px 0 var(--grass-dark), 0 10px 0 var(--ink), 6px 12px 0 rgba(0,0,0,.25);
+    text-wrap: balance;
+  }
+  .title .name { font-family: var(--arabic); font-weight: 700; color: var(--lemon); letter-spacing: 0; line-height: 1.1;
+    text-shadow: 0 5px 0 var(--lemon-dark), 0 10px 0 var(--ink), 6px 12px 0 rgba(0,0,0,.25); }
+  .title .brand { display: inline-flex; align-items: center; gap: .12em; }
+  .lemon-ico { width: .62em; height: .62em; flex: none; image-rendering: pixelated; }
+  .title small { display: block; font-size: .32em; letter-spacing: .3em; color: var(--gold); text-shadow: 0 3px 0 var(--ink); margin-top: 14px; }
+  .heading { font-family: var(--display); font-weight: 700; font-size: clamp(30px, 7vw, 48px); margin: 0; text-shadow: 0 4px 0 var(--ink); text-align: center; }
+
+  #menu { justify-content: space-between; padding-block: max(28px, env(safe-area-inset-top)) max(26px, env(safe-area-inset-bottom)); }
+  .menu-buttons { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .menu-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .stats-strip { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; font-family: var(--display); font-size: 18px; font-variant-numeric: tabular-nums; }
+  .chip .lbl { font-family: var(--body); font-size: 12px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+  .hint { font-size: 13px; color: var(--text); text-align: center; opacity: .9; text-shadow: 0 2px 0 rgba(0,0,0,.6); max-width: 36em; }
+  .hint kbd { font-family: var(--display); background: var(--panel); border: 2px solid var(--ink); padding: 0 5px; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; padding: max(10px, env(safe-area-inset-top)) 12px 0; box-sizing: border-box; }
+  .hud-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 8px; }
+  .hud-box { padding: 6px 12px 8px; min-width: 0; }
+  .hud-box .lbl { font-size: 11px; letter-spacing: .18em; color: var(--muted); text-transform: uppercase; }
+  .hud-box .val { font-family: var(--display); font-weight: 700; font-size: clamp(20px, 5vw, 30px); font-variant-numeric: tabular-nums; line-height: 1.05; }
+  .hud-left { justify-self: start; display: flex; gap: 6px; align-items: start; }
+  .hud-center { justify-self: center; text-align: center; }
+  .hud-right { justify-self: end; display: flex; gap: 8px; align-items: start; }
+  .mult { background: var(--gold); color: var(--ink); font-family: var(--display); font-weight: 700; padding: 3px 7px; border: 3px solid var(--ink); font-size: 18px; align-self: center; }
+  .coins-val { display: flex; align-items: center; gap: 8px; }
+  #pauseBtn { pointer-events: auto; width: 46px; height: 46px; padding: 0; min-width: 0; display: grid; place-items: center; }
+  #pauseBtn i { display: block; width: 14px; height: 16px; border-left: 5px solid var(--text); border-right: 5px solid var(--text); box-sizing: border-box; }
+  #powerbars { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; width: min(210px, 46vw); }
+  .pbar { display: flex; align-items: center; gap: 8px; padding: 4px 6px; }
+  .pbar canvas { width: 26px; height: 26px; image-rendering: pixelated; border: 2px solid var(--ink); flex: none; }
+  .pbar .track { flex: 1; height: 10px; background: var(--ink); }
+  .pbar .fill { height: 100%; background: var(--gold); transform-origin: left; }
+  #toast { position: fixed; left: 50%; top: 26%; transform: translate(-50%, 0); font-family: var(--display); font-weight: 700; font-size: clamp(22px, 6vw, 38px); color: #fff; text-shadow: 0 4px 0 var(--ink); pointer-events: none; opacity: 0; transition: opacity .25s, transform .25s; white-space: nowrap; }
+  #toast.show { opacity: 1; transform: translate(-50%, -8px); }
+  #biomeName { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); font-family: var(--display); font-size: 16px; letter-spacing: .3em; text-transform: uppercase; color: #fff; text-shadow: 0 2px 0 var(--ink); opacity: 0; transition: opacity .6s; pointer-events: none; }
+  #biomeName.show { opacity: .95; }
+  #fps { position: fixed; right: 12px; bottom: 10px; font-family: var(--display); font-size: 13px; color: #fff; text-shadow: 0 1px 0 #000; pointer-events: none; }
+
+  /* ---------- game over / pause / settings / character ---------- */
+  #gameover .card, #pause .card, #settings .card { max-height: calc(100% - 24px); overflow-y: auto; }
+  .card { padding: 22px 22px 24px; width: min(420px, 100%); box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; align-items: stretch; }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .result { background: var(--panel-2); border: 3px solid var(--ink); padding: 8px 10px; }
+  .result .lbl { font-size: 11px; letter-spacing: .16em; color: var(--muted); text-transform: uppercase; }
+  .result .val { font-family: var(--display); font-weight: 700; font-size: 26px; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 8px; }
+  .result.big { grid-column: 1 / -1; text-align: center; }
+  .result.big .val { font-size: 44px; justify-content: center; color: var(--gold); }
+  .newbest { font-family: var(--display); color: var(--ink); background: var(--gold); border: 3px solid var(--ink); padding: 2px 10px; align-self: center; font-size: 18px; animation: pop .6s steps(4) infinite alternate; }
+  @keyframes pop { to { transform: scale(1.08); } }
+  .card .btn { width: 100%; min-width: 0; }
+  .setting { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; background: var(--panel-2); border: 3px solid var(--ink); }
+  .setting span { font-family: var(--display); font-size: 18px; }
+  .toggle { font-family: var(--display); font-size: 16px; min-width: 88px; padding: 6px 10px 8px; }
+  .toggle[aria-pressed="true"] { background: var(--grass); box-shadow: inset 0 3px 0 rgba(255,255,255,.25), inset 0 -5px 0 var(--grass-dark), 0 4px 0 var(--ink); }
+  /* secret code (Game Over) */
+  .secret { display: flex; flex-direction: column; gap: 10px; }
+  .btn.lemon {
+    font-family: var(--arabic); letter-spacing: 0; color: var(--ink); text-shadow: none;
+    background: var(--lemon);
+    box-shadow: inset 0 3px 0 rgba(255,255,255,.5), inset 0 -6px 0 var(--lemon-dark), 0 5px 0 var(--ink);
+  }
+  .btn.lemon:active { box-shadow: inset 0 3px 0 rgba(255,255,255,.5), inset 0 -3px 0 var(--lemon-dark), 0 1px 0 var(--ink); }
+  .code-form { display: flex; flex-direction: column; gap: 8px; background: var(--panel-2); border: 3px solid var(--ink); padding: 10px; }
+  .code-label { font-family: var(--arabic); font-size: 15px; color: var(--muted); }
+  .code-row { display: flex; gap: 8px; align-items: stretch; }
+  .code-input {
+    flex: 1; min-width: 0; font-family: var(--arabic); font-size: 18px; color: var(--text);
+    background: var(--ink); border: 3px solid #000; padding: 8px 10px; outline: none;
+    box-shadow: inset 0 3px 0 rgba(0,0,0,.5); user-select: text; -webkit-user-select: text;
+  }
+  .code-input:focus-visible { border-color: var(--lemon); }
+  .code-row .btn { width: auto; min-width: 96px; }
+  .code-msg { margin: 0; min-height: 1.3em; font-family: var(--arabic); font-size: 16px; font-weight: 700; }
+  .code-msg.bad { color: #ff8a80; }
+  .code-msg.good { color: var(--lemon); }
+  .shake { animation: shake .3s steps(6); }
+  @keyframes shake { 0%,100% { transform: none } 25% { transform: translateX(-6px) } 75% { transform: translateX(6px) } }
+  #character { justify-content: flex-end; padding-bottom: max(26px, env(safe-area-inset-bottom)); }
+  .char-bar { display: flex; align-items: center; gap: 10px; padding: 12px; width: min(460px, 100%); box-sizing: border-box; }
+  .char-bar .name { flex: 1; text-align: center; }
+  .char-bar .name b { display: block; font-family: var(--display); font-size: 30px; }
+  .char-bar .name span { font-size: 13px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+  .arrow { width: 52px; min-width: 0; padding: 8px 0 10px; font-size: 24px; }
+
+  #loading { background: #1a2030; }
+  .loadbar { width: min(280px, 70vw); height: 18px; border: 3px solid var(--ink); background: var(--panel); }
+  .loadbar div { height: 100%; width: 30%; background: var(--grass); animation: load 1s steps(6) infinite; }
+  @keyframes load { from { margin-left: 0 } to { margin-left: 70% } }
+
+
+  /* =============================== MISSION MODE =============================== */
+  #fade { position: fixed; inset: 0; pointer-events: none; z-index: 40;
+    background: radial-gradient(circle at 50% 50%, #fff7c2 0%, #ffe14a 45%, #d9a90f 100%); }
+  #countdown { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 30; pointer-events: none;
+    font-family: var(--display); font-weight: 700; font-size: clamp(80px, 22vw, 180px); color: var(--lemon);
+    text-shadow: 0 8px 0 var(--lemon-dark), 0 16px 0 var(--ink); }
+  #mission-ui { position: fixed; inset: 0; z-index: 20; pointer-events: none; font-family: var(--body); }
+  #mission-ui .mi-hud > *, #mission-ui .mi-overlay, #mission-ui .mi-touch * { pointer-events: auto; }
+  #mission-ui .mi-cross, #mission-ui .mi-prompt, #mission-ui .mi-caption, #mission-ui .mi-toast, #mission-ui .mi-lockhint { pointer-events: none; }
+  .mi-key { display: inline-block; font-family: var(--display); font-size: 13px; line-height: 1; padding: 3px 6px 4px; margin-right: 6px;
+    background: var(--ink); color: var(--lemon); border: 2px solid #000; min-width: 12px; text-align: center; }
+  .mi-objective { position: absolute; left: 12px; top: max(10px, env(safe-area-inset-top)); padding: 8px 12px 10px; max-width: min(360px, 62vw); }
+  .mi-mname { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--lemon); }
+  .mi-obj { font-family: var(--display); font-weight: 700; font-size: 19px; margin-top: 2px; }
+  .mi-step { font-size: 14px; margin-top: 6px; display: flex; align-items: center; gap: 8px; color: var(--text); }
+  .mi-box { width: 12px; height: 12px; border: 2px solid var(--muted); flex: none; display: inline-block; box-sizing: border-box; }
+  .mi-box.done { background: var(--grass); border-color: var(--grass); box-shadow: inset 0 0 0 2px var(--ink); }
+  .mi-progress { display: flex; gap: 4px; align-items: center; margin-top: 8px; }
+  .mi-progress i { width: 18px; height: 6px; background: #000; display: block; }
+  .mi-progress i.on { background: var(--lemon); }
+  .mi-progress span { font-size: 11px; color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+  .mi-topright { position: absolute; right: 12px; top: max(10px, env(safe-area-inset-top)); display: flex; gap: 8px; align-items: start; }
+  .mi-timer { font-family: var(--display); font-size: 22px; padding: 6px 12px 8px; font-variant-numeric: tabular-nums; }
+  .mi-timer.warn { color: #ff8a80; }
+  .mi-iconbtn { min-width: 0; height: 44px; display: inline-flex; align-items: center; gap: 2px; }
+  .mi-pausei { display: block; width: 12px; height: 14px; border-left: 4px solid var(--text); border-right: 4px solid var(--text); box-sizing: border-box; }
+  .mi-cross { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; background: #fff; box-shadow: 0 0 0 2px rgba(0,0,0,.55); transition: transform .08s; }
+  .mi-cross.on { width: 16px; height: 16px; margin: -8px 0 0 -8px; background: transparent; border: 3px solid #fff; box-sizing: border-box; }
+  .mi-cross.on.kind-inspect { border-color: #7fd4ff; }
+  .mi-cross.on.kind-collect { border-color: var(--lemon); }
+  .mi-cross.on.kind-interact { border-color: #7ee06a; }
+  .mi-prompt { position: absolute; left: 50%; top: calc(50% + 26px); transform: translateX(-50%); display: flex; align-items: center; gap: 6px;
+    background: rgba(14,17,26,.82); border: 3px solid var(--ink); padding: 6px 12px 7px; white-space: nowrap; font-size: 15px; max-width: 92vw; }
+  .mi-prompt .mi-label { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+  .mi-prompt .mi-ico { font-size: 15px; }
+  .mi-prompt.kind-inspect { border-color: #2a7fc0; } .mi-prompt.kind-inspect b, .mi-prompt.kind-inspect .mi-ico { color: #7fd4ff; }
+  .mi-prompt.kind-collect { border-color: var(--lemon-dark); } .mi-prompt.kind-collect b, .mi-prompt.kind-collect .mi-ico { color: var(--lemon); }
+  .mi-prompt.kind-interact { border-color: #3f8a2b; } .mi-prompt.kind-interact b, .mi-prompt.kind-interact .mi-ico { color: #7ee06a; }
+  .mi-caption { position: absolute; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: min(640px, 90vw);
+    text-align: center; background: rgba(0,0,0,.72); padding: 6px 12px 8px; font-size: 16px; line-height: 1.35; }
+  .mi-hotbar { position: absolute; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; gap: 6px; }
+  .mi-slot { background: rgba(14,17,26,.85); border: 3px solid var(--ink); padding: 6px 10px 8px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+  .mi-slot.sel { border-color: var(--lemon); box-shadow: 0 0 0 2px var(--ink); }
+  .mi-ability { position: absolute; left: 12px; bottom: max(14px, env(safe-area-inset-bottom)); padding: 6px 10px 8px; display: flex; align-items: center; gap: 4px; font-size: 13px; opacity: .7; }
+  .mi-ability.ready { opacity: 1; }
+  .mi-cd { width: 70px; height: 8px; background: #000; margin-left: 8px; }
+  .mi-cd div { height: 100%; background: var(--lemon); transform-origin: left; }
+  .mi-toast { position: absolute; left: 50%; top: 22%; transform: translate(-50%, 0); font-family: var(--display); font-weight: 700; font-size: clamp(18px, 4vw, 26px);
+    color: #fff; text-shadow: 0 3px 0 var(--ink); opacity: 0; transition: opacity .25s, transform .25s; white-space: nowrap; }
+  .mi-toast.show { opacity: 1; transform: translate(-50%, -6px); }
+  .mi-lockhint { position: absolute; left: 50%; top: calc(50% - 50px); transform: translateX(-50%); font-size: 13px; color: #fff; background: rgba(0,0,0,.6); padding: 4px 10px; }
+  .mi-overlay { position: absolute; inset: 0; background: rgba(8,10,16,.55); display: flex; align-items: center; justify-content: center; padding-inline: 16px; }
+  .mi-card { width: min(560px, 100%); max-height: calc(100% - 24px); overflow-y: auto; box-sizing: border-box; padding: 20px 22px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .mi-card .btn { min-width: 0; }
+  .mi-card.mi-journal { width: min(820px, 100%); }
+  .mi-eyebrow { font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--lemon); }
+  .mi-title { text-align: left; }
+  .mi-intro { margin: 0; font-size: 16px; line-height: 1.5; color: var(--text); max-width: 60ch; }
+  .mi-small { margin: 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+  .mi-objline { display: flex; gap: 10px; align-items: center; font-family: var(--display); font-size: 18px; }
+  .mi-tag { background: var(--lemon); color: var(--ink); font-size: 12px; padding: 3px 8px; font-family: var(--body); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+  .mi-controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 12px; font-size: 13px; color: var(--muted); }
+  .mi-controls div { display: flex; align-items: center; }
+  .mi-read { padding: 18px 18px 20px; font-size: clamp(20px, 4.5vw, 28px); line-height: 1.35; text-align: center; border: 3px solid var(--ink); }
+  .mi-read.style-paint, .mi-read.style-blood { background: #5d5a55; color: #f4efe1; font-family: var(--display); }
+  .mi-read.style-chalk { background: #2c3a33; color: #eef2ea; font-family: var(--display); border-color: #6b4a2e; }
+  .mi-read.style-paper, .mi-read.style-note { background: #efe6cf; color: #2a2622; font-family: var(--body); font-weight: 700; }
+  .mi-read.style-sign, .mi-read.style-stencil { background: #23313f; color: var(--lemon); font-family: var(--body); font-weight: 700; }
+  .mi-read.style-glow { background: #050608; color: #c8ff7a; font-family: var(--display); text-shadow: 0 0 12px rgba(160,255,90,.8); }
+  .mi-sym { width: 1.25em; height: 1.25em; vertical-align: -0.25em; image-rendering: pixelated; margin: 0 .08em; }
+  .mi-read .mi-sym { width: 1.6em; height: 1.6em; }
+  .mi-dials { display: flex; gap: 14px; justify-content: center; }
+  .mi-dial { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border: 3px solid var(--ink); background: var(--panel-2); }
+  .mi-dial.focus { border-color: var(--lemon); }
+  .mi-dial img { width: 64px; height: 64px; image-rendering: pixelated; background: #1a2030; border: 3px solid #000; }
+  .mi-dial .btn { width: 64px; padding: 4px 0 6px; }
+  .mi-lockmsg { margin: 0; min-height: 1.4em; text-align: center; font-weight: 700; }
+  .mi-lockmsg.good { color: var(--lemon); } .mi-lockmsg.bad { color: #ff8a80; }
+  .mi-row { display: flex; gap: 10px; flex-wrap: wrap; } .mi-row .btn { flex: 1; }
+  .mi-jcols { display: grid; grid-template-columns: 1fr 1.2fr; gap: 18px; }
+  @media (max-width: 640px) { .mi-jcols { grid-template-columns: 1fr; } }
+  .mi-jcols h3, .mi-rewards h3 { margin: 6px 0 6px; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  .mi-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+  .mi-checks li { display: flex; gap: 8px; align-items: center; }
+  .mi-checks li.done { color: var(--muted); }
+  .mi-hints { margin: 0 0 8px; padding-left: 20px; font-size: 13px; line-height: 1.45; color: var(--text); display: flex; flex-direction: column; gap: 4px; }
+  .mi-jentry { background: var(--panel-2); border: 3px solid var(--ink); padding: 8px 10px; margin-bottom: 8px; }
+  .mi-jtitle { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--lemon); }
+  .mi-jtext { font-family: var(--display); font-size: 17px; margin-top: 4px; line-height: 1.35; }
+  .mi-setting { display: grid; grid-template-columns: 1fr 1.4fr 48px; gap: 10px; align-items: center; background: var(--panel-2); border: 3px solid var(--ink); padding: 8px 10px; }
+  .mi-setting label { font-family: var(--display); }
+  .mi-setting input { width: 100%; accent-color: var(--lemon); }
+  .mi-setting output { font-variant-numeric: tabular-nums; text-align: right; }
+  .mi-done { color: var(--lemon); text-align: left; }
+  .mi-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  @media (max-width: 480px) { .mi-stats { grid-template-columns: repeat(2, 1fr); } }
+  .mi-stats div { background: var(--panel-2); border: 3px solid var(--ink); padding: 6px 8px; display: flex; flex-direction: column; }
+  .mi-stats span { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .mi-stats b { font-family: var(--display); font-size: 22px; font-variant-numeric: tabular-nums; }
+  .mi-rewards { background: var(--panel-2); border: 3px solid var(--ink); padding: 8px 12px 10px; }
+  .mi-rline { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 14px; border-bottom: 1px dashed rgba(255,255,255,.12); }
+  .mi-rline b { display: inline-flex; align-items: center; gap: 4px; color: var(--lemon); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .mi-rline .coin-ico { width: 12px; height: 12px; }
+  .mi-ach { margin-top: 8px; font-family: var(--display); color: var(--lemon); }
+  .mi-card.shake { animation: shake .3s steps(6); }
+  /* touch controls */
+  .mi-touch { position: absolute; inset: 0; pointer-events: none; }
+  .mi-stickzone { position: absolute; left: 0; bottom: 0; width: 45%; height: 60%; pointer-events: auto; touch-action: none; }
+  .mi-lookzone { position: absolute; right: 0; top: 18%; width: 55%; height: 82%; pointer-events: auto; touch-action: none; }
+  .mi-stick { position: absolute; left: 90px; top: calc(100% - 110px); width: 110px; height: 110px; margin: -55px 0 0 -55px; border: 3px solid rgba(255,255,255,.35); border-radius: 50%; }
+  .mi-stick.on { border-color: rgba(255,225,74,.7); }
+  .mi-knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; background: rgba(255,225,74,.7); border: 3px solid var(--ink); }
+  .mi-tbtns { position: absolute; right: 12px; bottom: max(70px, calc(env(safe-area-inset-bottom) + 60px)); display: grid; grid-template-columns: repeat(2, 72px); gap: 10px; pointer-events: auto; }
+  .mi-tbtn { height: 64px; font-family: var(--display); font-size: 15px; color: var(--text); background: rgba(35,42,59,.8); border: 3px solid var(--ink); touch-action: none; }
+  .mi-tbtn.mi-tuse { background: rgba(255,225,74,.85); color: var(--ink); }
+  @media (pointer: coarse) {
+    .mi-ability { left: auto; right: 12px; bottom: auto; top: calc(max(10px, env(safe-area-inset-top)) + 100px); padding: 4px 8px 6px; }
+    .mi-ability .mi-key { display: none; }
+    .mi-hotbar { bottom: auto; top: calc(max(10px, env(safe-area-inset-top)) + 140px); right: 12px; left: auto; transform: none; flex-direction: column; align-items: flex-end; }
+    .mi-caption { bottom: auto; top: 30%; }
+  }
+  @media (max-width: 560px) {
+    .mi-topright { flex-wrap: wrap; justify-content: flex-end; max-width: 112px; }
+    .mi-timer { order: 3; font-size: 17px; padding: 4px 8px 6px; }
+    .mi-objective { max-width: calc(100vw - 150px); padding: 6px 10px 8px; }
+    .mi-objline { flex-wrap: wrap; font-size: 16px; }
+    .mi-mname { font-size: 9px; letter-spacing: .1em; }
+    .mi-obj { font-size: 15px; }
+    .mi-step { font-size: 12px; }
+    .mi-jlabel { display: none; }
+    .mi-iconbtn .mi-key { margin-right: 0; }
+    .mi-prompt { font-size: 13px; }
+  }
+
+
+  /* ============================ ARABIC / RTL ============================ */
+  html[lang="ar"] {
+    --display: 'Reem Kufi', 'Pixelify Sans', Tahoma, sans-serif;
+    --body: 'Tajawal', 'Chakra Petch', Tahoma, sans-serif;
+  }
+  html[lang="ar"] .btn, html[lang="ar"] .heading, html[lang="ar"] .title small,
+  html[lang="ar"] .hud-box .lbl, html[lang="ar"] .chip .lbl, html[lang="ar"] .result .lbl,
+  html[lang="ar"] .mi-mname, html[lang="ar"] .mi-eyebrow, html[lang="ar"] .mi-tag, html[lang="ar"] #biomeName,
+  html[lang="ar"] .mi-jtitle, html[lang="ar"] .mi-stats span, html[lang="ar"] .mi-jcols h3, html[lang="ar"] .mi-rewards h3 { letter-spacing: 0; text-transform: none; }
+  html[lang="ar"] .title small { font-size: .38em; }
+  html[lang="ar"] .hud-box .lbl { font-size: 12px; }
+  html[lang="ar"] .val, html[lang="ar"] .mi-timer, html[lang="ar"] .mi-stats b, html[lang="ar"] #countdown { font-family: 'Pixelify Sans', 'Reem Kufi', monospace; }
+  /* numbers stay left-to-right runs (Latin pixel fonts flip digits inside right-to-left runs) */
+  .num, #hudScore, #hudCoins, #hudMult, #goScore, #goCoins, #goBest, #menuBest, #menuBank, .mi-timer, .mi-stats b, #countdown, .mi-progress span { direction: ltr; unicode-bidi: isolate; }
+  .num { display: inline-block; }
+  .result-best { text-align: start; }
+  .result-best .val { font-size: 26px !important; justify-content: flex-start !important; color: var(--text) !important; }
+  .lang-toggle { min-width: 110px; }
+  [dir="rtl"] .mi-objective { left: auto; right: 12px; }
+  [dir="rtl"] .mi-topright { right: auto; left: 12px; }
+  [dir="rtl"] .mi-key { margin-right: 0; margin-left: 6px; }
+  [dir="rtl"] .mi-hints { padding-left: 0; padding-right: 20px; }
+  [dir="rtl"] .mi-cd { margin-left: 0; margin-right: 8px; }
+  [dir="rtl"] .mi-cd div, [dir="rtl"] .pbar .fill { transform-origin: right; }
+  @media (pointer: coarse) {
+    [dir="rtl"] .mi-ability, [dir="rtl"] .mi-hotbar { right: auto; left: 12px; }
+    [dir="rtl"] .mi-hotbar { align-items: flex-start; }
+  }
+
+  @media (max-width: 480px) {
+    .btn.primary { font-size: 26px; min-width: 210px; }
+    .hud-box { padding: 5px 8px 6px; }
+    .hud-box .lbl { font-size: 9px; letter-spacing: .12em; }
+    #pauseBtn { width: 40px; height: 40px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .newbest, .loadbar div { animation: none; } }
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<!-- LOADING -->
+<section id="loading" class="screen">
+  <h1 class="title"><span class="brand"><canvas class="lemon-ico" width="16" height="16" aria-hidden="true"></canvas><span class="name" dir="rtl" lang="ar">ليمونات</span></span></h1>
+  <div class="loadbar"><div></div></div>
+  <p class="hint" id="loadMsg" data-i18n="loading">Placing blocks…</p>
+</section>
+
+<!-- MAIN MENU -->
+<section id="menu" class="screen" hidden>
+  <h1 class="title"><span class="brand"><canvas class="lemon-ico" width="16" height="16" aria-hidden="true"></canvas><span class="name" dir="rtl" lang="ar">ليمونات</span></span><small data-i18n="app.subtitle">Endless Block Runner</small></h1>
+  <div class="menu-buttons">
+    <div class="stats-strip">
+      <div class="chip panel"><span class="lbl" data-i18n="menu.best">Best</span><span id="menuBest">0</span></div>
+      <div class="chip panel"><span class="coin-ico"></span><span id="menuBank">0</span></div>
+    </div>
+    <button class="btn primary" id="playBtn" data-i18n="menu.play">PLAY</button>
+    <div class="menu-row">
+      <button class="btn" id="charBtn" data-i18n="menu.character">CHARACTER</button>
+      <button class="btn" id="settingsBtn" data-i18n="menu.settings">SETTINGS</button>
+    </div>
+    <p class="hint" data-i18n-html="menu.hint"></p>
+  </div>
+</section>
+
+<!-- CHARACTER SELECT -->
+<section id="character" class="screen" hidden>
+  <div class="char-bar panel">
+    <button class="btn arrow" id="charPrev" data-i18n-aria="char.prev" aria-label="Previous character">&lsaquo;</button>
+    <div class="name"><b id="charName">Pip</b><span id="charTag">The original runner</span></div>
+    <button class="btn arrow" id="charNext" data-i18n-aria="char.next" aria-label="Next character">&rsaquo;</button>
+  </div>
+  <button class="btn primary" id="charDone" data-i18n="char.select">SELECT</button>
+</section>
+
+<!-- SETTINGS -->
+<section id="settings" class="screen dim" hidden>
+  <div class="card panel">
+    <h2 class="heading" data-i18n="settings.title">Settings</h2>
+    <div class="setting"><span data-i18n="settings.sfx">Sound effects</span><button class="btn toggle" id="optSfx" aria-pressed="true">ON</button></div>
+    <div class="setting"><span data-i18n="settings.music">Music</span><button class="btn toggle" id="optMusic" aria-pressed="true">ON</button></div>
+    <div class="setting"><span data-i18n="settings.quality">Graphics</span><button class="btn toggle" id="optQuality" aria-pressed="true">HIGH</button></div>
+    <div class="setting"><span data-i18n="settings.fps">Show FPS</span><button class="btn toggle" id="optFps" aria-pressed="false">OFF</button></div>
+    <div class="setting"><span data-i18n="settings.lang">Language</span><button class="btn toggle lang-toggle" id="optLang" lang="">English</button></div>
+    <button class="btn" id="settingsDone" data-i18n="settings.back">BACK</button>
+  </div>
+</section>
+
+<!-- HUD -->
+<div id="hud" hidden>
+  <div class="hud-top">
+    <div class="hud-left">
+      <div class="hud-box panel"><div class="lbl" data-i18n="hud.score">Score</div><div class="val" id="hudScore">0</div></div>
+      <div class="mult" id="hudMult">x1</div>
+    </div>
+    <div class="hud-center hud-box panel"><div class="lbl" data-i18n="hud.distance">Distance</div><div class="val" id="hudDist">0 m</div></div>
+    <div class="hud-right">
+      <div class="hud-box panel"><div class="lbl" data-i18n="hud.coins">Coins</div><div class="val coins-val"><span class="coin-ico"></span><span id="hudCoins">0</span></div></div>
+      <button class="btn" id="pauseBtn" data-i18n-aria="hud.pause" aria-label="Pause"><i></i></button>
+    </div>
+  </div>
+  <div id="powerbars"></div>
+</div>
+<div id="toast" dir="auto"></div>
+<div id="biomeName"></div>
+<div id="fps" hidden></div>
+<div id="mission-ui" hidden></div>
+<div id="countdown" hidden>3</div>
+<div id="fade" hidden></div>
+
+<!-- PAUSE -->
+<section id="pause" class="screen dim" hidden>
+  <div class="card panel">
+    <h2 class="heading" data-i18n="pause.title">Paused</h2>
+    <button class="btn primary" id="resumeBtn" data-i18n="pause.resume">RESUME</button>
+    <button class="btn" id="pauseSettings" data-i18n="pause.settings">SETTINGS</button>
+    <button class="btn" id="pauseMenu" data-i18n="pause.menu">MAIN MENU</button>
+  </div>
+</section>
+
+<!-- GAME OVER -->
+<section id="gameover" class="screen dim" hidden>
+  <div class="card panel">
+    <h2 class="heading" data-i18n="go.title">Game Over</h2>
+    <div class="newbest" id="newBest" hidden data-i18n="go.newBest">NEW BEST!</div>
+    <div class="result-grid">
+      <div class="result big"><div class="lbl" data-i18n="go.final">Final score</div><div class="val" id="goScore">0</div></div>
+      <div class="result"><div class="lbl" data-i18n="go.distance">Distance</div><div class="val" id="goDist">0 m</div></div>
+      <div class="result"><div class="lbl" data-i18n="go.coins">Coins</div><div class="val"><span class="coin-ico"></span><span id="goCoins">0</span></div></div>
+      <div class="result big result-best"><div class="lbl" data-i18n="go.best">Best score</div><div class="val" id="goBest">0</div></div>
+    </div>
+    <div class="secret">
+      <button class="btn lemon" id="codeBtn" type="button" data-i18n="code.button">إدخال كود سري</button>
+      <form id="codeForm" class="code-form" hidden autocomplete="off">
+        <label for="codeInput" class="code-label" data-i18n="code.label">اكتب الكود السري لمتابعة الجولة</label>
+        <div class="code-row">
+          <input id="codeInput" class="code-input" type="text" dir="auto" spellcheck="false" autocomplete="off" autocapitalize="off">
+          <button class="btn lemon small" id="codeSubmit" type="submit" data-i18n="code.submit">متابعة</button>
+        </div>
+        <p id="codeMsg" class="code-msg" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+    <button class="btn primary" id="againBtn" data-i18n="go.again">PLAY AGAIN</button>
+    <button class="btn" id="goMenu" data-i18n="go.menu">MAIN MENU</button>
+  </div>
+</section>
+
+<script src="lib/three.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/voxel.js"></script>
+<script src="js/character.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/input.js"></script>
+<script src="js/biomes.js"></script>
+<script src="js/prefabs.js"></script>
+<script src="js/patterns.js"></script>
+<script src="js/secrets.js"></script>
+<script src="js/collectibles.js"></script>
+<script src="js/world.js"></script>
+<script src="js/player.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/missions/symbols.js"></script>
+<script src="js/missions/text.js"></script>
+<script src="js/missions/models.js"></script>
+<script src="js/missions/level.js"></script>
+<script src="js/missions/fpcontroller.js"></script>
+<script src="js/missions/framework.js"></script>
+<script src="js/missions/data.js"></script>
+<script src="js/missions/missionui.js"></script>
+<script src="js/missions/missions.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
