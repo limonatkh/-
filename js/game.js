@@ -27,7 +27,9 @@
       this.player.setCharacter(VR.CHARACTERS[this.charIndex]);
       // mission mode (first-person) lives in its own scene, driven by this loop
       this.missions = new VR.MissionManager(this);
-      this.world.gateProvider = () => this.missions.nextForGate();
+      // no mission gates in a challenge: both players must run the same track
+      this.world.gateProvider = () => (this.challenge && this.challenge.inRace ? null : this.missions.nextForGate());
+      this.challenge = new VR.Challenge(this);
       this.fade = { value: 0, target: 0, speed: 3 };
       this.fadeEl = document.getElementById('fade');
       this.countdownEl = document.getElementById('countdown');
@@ -110,6 +112,8 @@
       UI.bind('resumeBtn', () => this.resume());
       UI.bind('pauseMenu', () => this.toMenu());
       UI.bind('goMenu', () => this.toMenu());
+      // Esc on the challenge screens goes back
+      window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && this.state === 'challenge') this.challenge.leave(true); });
       // secret-code continue
       UI.bind('codeBtn', () => UI.openCodeForm());
       document.getElementById('codeInput').addEventListener('input', () => {
@@ -159,7 +163,7 @@
     // ------------------------------------------------------------ states
     setState(s) {
       this.state = s;
-      const map = { menu: 'menu', character: 'character', settings: 'settings', paused: 'pause', gameover: 'gameover', playing: null, loading: 'loading' };
+      const map = { menu: 'menu', character: 'character', settings: 'settings', paused: 'pause', gameover: 'gameover', playing: null, loading: 'loading', challenge: 'challenge', chresult: 'chresult' };
       UI.show(map[s]);
       UI.hud(s === 'playing' || s === 'paused' || s === 'dying' || s === 'gateEnter' || s === 'countdown');
       VR.Input.setEnabled(s === 'playing');
@@ -180,15 +184,16 @@
       this.renderer.compile(this.scene, this.camera);
       this.setState('menu');
       this.loop();
+      this.challenge.boot();                       // opened from an invite link?
     }
 
-    resetRun() {
+    resetRun(seed = null) {
       this.usedCodes = new Set();                  // each secret code works once per run
       this.canContinue = false;
       this.deathState = null;
       this.player.reset();
       this.powerups.reset();
-      this.world.reset();
+      this.world.reset(seed);
       this.distance = 0; this.score = 0; this.coins = 0;
       this.multiplier = 1;
       this.speed = C.SPEED_START;
@@ -211,9 +216,25 @@
       if (this.settings.music) VR.Audio.startMusic();
       VR.Audio.setMusicVolume(1);
     }
+    /** Challenge round: same seed as the other player, then 3-2-1 together. */
+    startChallengeRun(seed) {
+      VR.Audio.unlock();
+      if (this.missions.active) this.missions.abort();
+      this.fade.value = this.fade.target = 0; this.updateFade(0);
+      this.resetRun(seed);
+      this.world.update(0, this.player, C.SPEED_START, 0, this, true);
+      this.camera.position.copy(this.menuCamPos || this.camera.position);
+      this.countdown = 3; this.countdownStar = 0;
+      this.countdownEl.hidden = false; this.countdownEl.textContent = '3';
+      this.setState('countdown');
+      VR.Audio.play('click');
+      if (this.settings.music) VR.Audio.startMusic();
+      VR.Audio.setMusicVolume(0.6);
+    }
     pause() { if (this.state !== 'playing') return; this.setState('paused'); VR.Audio.setMusicVolume(0.3); }
     resume() { this.setState('playing'); this.clock.getDelta(); VR.Audio.setMusicVolume(1); }
     toMenu() {
+      if (this.challenge.active) this.challenge.leave(false);
       if (this.missions.active) this.missions.abort();
       this.fade.value = this.fade.target = 0; this.updateFade(0);
       this.countdownEl.hidden = true;
@@ -232,6 +253,8 @@
       this.canContinue = true;                     // one continue per death
       this.player.groundAtDeath = this.world.surfaceAt(this.player.x, this.player.z, this.player.y + 0.01, 0.3).h;
       this.player.die();
+      const racing = this.challenge.inRace;
+      if (racing) { this.canContinue = false; this.challenge.onLocalDeath(); }   // no secret codes in a challenge
       VR.Audio.play('crash');
       VR.Audio.setMusicVolume(0.25);
       this.shake = 0.5;
@@ -239,6 +262,8 @@
       if (isBest) { this.best = Math.floor(this.score); UI.store.set('best', this.best); }
       this.bank += this.coins; UI.store.set('bank', this.bank);
       setTimeout(() => {
+        if (this.state !== 'dying') return;                // left in the meantime
+        if (racing && this.challenge.inRace) { this.challenge.showResult(); return; }
         UI.gameOver({ score: this.score, dist: this.distance, coins: this.coins, best: this.best, isBest });
         this.setState('gameover');
       }, 1300);
@@ -366,7 +391,7 @@
         this.missions.exit();
         this.restoreRun(this.runSnapshot, this.returnRewards);
         this.runSnapshot = null;
-        this.countdown = C.MISSION_RETURN_COUNTDOWN;
+        this.countdown = C.MISSION_RETURN_COUNTDOWN; this.countdownStar = C.MISSION_RETURN_STAR;
         this.countdownEl.hidden = false; this.countdownEl.textContent = String(Math.ceil(this.countdown));
         this.setState('countdown');
         this.fade.target = 0;
@@ -395,7 +420,8 @@
       this.world.animateGates(dt);
       if (this.countdown <= 0) {
         this.countdownEl.hidden = true;
-        this.powerups.timers.invincible = Math.max(this.powerups.remaining('invincible'), C.MISSION_RETURN_STAR);
+        if (this.countdownStar) this.powerups.timers.invincible = Math.max(this.powerups.remaining('invincible'), this.countdownStar);
+        this.challenge.onRaceStart();
         this.clock.getDelta();
         this.setState('playing');
         VR.Audio.setMusicVolume(1); VR.Audio.play('powerup');
@@ -488,11 +514,12 @@
       const st = this.state;
       if (st === 'playing') this.updatePlaying(dt);
       else if (st === 'dying') { this.player.update(dt, 0, this.world, this); this.updateCamera(dt); }
-      else if (st === 'menu' || st === 'character' || st === 'loading') this.updateMenu(dt);
+      else if (st === 'menu' || st === 'character' || st === 'loading' || st === 'challenge') this.updateMenu(dt);
       else if (st === 'settings' && this.settingsReturn !== 'paused') this.updateMenu(dt);
       else if (st === 'gateEnter') this.updateGateEnter(dt);
       else if (st === 'mission' || st === 'gateReturn') this.updateMissionMode(dt);
       else if (st === 'countdown') this.updateCountdown(dt);
+      this.challenge.update(dt);
       this.updateFade(dt);
       if (this.state === 'mission' || this.state === 'gateReturn') this.missions.render(this.renderer);
       else {

@@ -319,6 +319,34 @@ The default is Arabic.
 * To add a language, add a table to `STRINGS` in `i18n.js` and a field for it in
   the mission data.
 
+## Challenge a friend (live two-player race)
+
+Menu → **تحدَّ صديقًا / Challenge a friend**.
+
+1. One player presses **Create invite** and sends the link (copy, WhatsApp or Share).
+   The link looks like `…/?vs=K7M2Q0`; the 6-character room code can also be typed in by hand.
+2. The friend opens the link and joins the room automatically. Both see each other's names.
+3. The host presses **Start the race**. Both games receive the same seed, so the track,
+   trains, coins and power-ups are identical, then a 3-2-1 countdown starts on both screens.
+4. While running, the other player appears as a see-through runner with a name tag, and the
+   HUD shows their score and how far ahead or behind they are. Players never collide.
+5. When both have crashed, the higher score wins. **Rematch** (both press it) starts a new track.
+
+Fairness: secret codes and mission gates are disabled during a challenge.
+
+How it works (no server of our own — the game is a static site):
+
+| Piece | File |
+|---|---|
+| Messages between the two players (public MQTT relay over secure WebSockets; outgoing connections only, so it works on mobile data) | `js/challenge/net.js` |
+| Lobby, start sync, state streaming (~10/s), ghost runner, HUD, results, rematch, disconnects | `js/challenge/challenge.js` |
+| Same-seed track (`world.reset(seed)`, difficulty from the chunk's position) | `js/world.js` |
+| MQTT browser client | `lib/mqtt.min.js` |
+
+The room code's last digit picks the relay, so both players use the same one. Testing locally:
+run any MQTT broker with WebSockets and add `?relay=ws://127.0.0.1:8899` to the URL
+(the invite link keeps this parameter).
+
 ## Performance notes
 
 - Every model is built once and pooled (`VR.Pool`); spawned objects share

@@ -65,13 +65,19 @@
       for (const key in this.pool.factories) { const o = this.pool.get(key); this.pool.release(o); }
     }
 
-    reset() {
+    /**
+     * seed: null for a normal run; a number for a challenge, so both players
+     * get exactly the same track, coins and power-ups.
+     */
+    reset(seed = null) {
       while (this.chunks.length) this.releaseChunk(this.chunks[0]);
+      this.seeded = seed !== null && seed !== undefined;
+      this.rnd = this.seeded ? VR.seededRandom(seed) : Math.random;
       this.collect.clear();
       this.nextZ = 60;                // one chunk behind the player (visible from the menu camera)
       this.chunkIndex = 0;
       this.biomeOrder = VR.BIOME_ORDER.slice();
-      this.biomeIdx = (Math.random() * this.biomeOrder.length) | 0;
+      this.biomeIdx = (this.rnd() * this.biomeOrder.length) | 0;
       this.biomeLeft = C.BIOME_MIN_CHUNKS;
       this.styleQueue = [];
       this.sinceSpecial = 0;
@@ -87,22 +93,29 @@
       const w = Object.assign({}, biome.styleWeights);
       // "environmental complexity" rises with difficulty
       w.tunnel *= 0.6 + difficulty; w.bridge *= 0.6 + difficulty; w.station *= 0.8 + difficulty * 0.5;
-      let r = Math.random() * (w.normal + w.tunnel + w.bridge + w.station);
+      let r = this.rnd() * (w.normal + w.tunnel + w.bridge + w.station);
       let s = 'normal';
       for (const k of ['normal', 'tunnel', 'bridge', 'station']) { r -= w[k]; if (r <= 0) { s = k; break; } }
       if (s === 'normal') { this.sinceSpecial++; return s; }
       this.sinceSpecial = 0;
       if (s === 'tunnel') { this.styleQueue.push('tunnel_end'); return 'tunnel_start'; }
-      if (s === 'bridge' && Math.random() < 0.5) this.styleQueue.push('bridge');
+      if (s === 'bridge' && this.rnd() < 0.5) this.styleQueue.push('bridge');
       return s;
     }
 
     spawnChunk(difficulty, speed) {
       const idx = this.chunkIndex++;
+      if (this.seeded) {
+        // challenge: difficulty comes from the chunk's place on the track, not from
+        // when it was streamed in (that depends on draw distance and boosts)
+        const d = Math.max(0, (idx - 5) * L);
+        difficulty = 1 - Math.exp(-d / C.DIFFICULTY_RAMP);
+        speed = C.SPEED_START + (C.SPEED_MAX - C.SPEED_START) * (1 - Math.exp(-d / C.SPEED_RAMP));
+      }
       // biome rotation (never switch mid-tunnel / mid-bridge)
       if (this.biomeLeft <= 0 && !this.styleQueue.length) {
         this.biomeIdx++;
-        this.biomeLeft = C.BIOME_MIN_CHUNKS + ((Math.random() * (C.BIOME_MAX_CHUNKS - C.BIOME_MIN_CHUNKS)) | 0);
+        this.biomeLeft = C.BIOME_MIN_CHUNKS + ((this.rnd() * (C.BIOME_MAX_CHUNKS - C.BIOME_MIN_CHUNKS)) | 0);
       }
       this.biomeLeft--;
       const biomeKey = this.currentBiomeKey();
@@ -126,8 +139,8 @@
       else if (!isTunnel) {
         put('ground_' + biomeKey);
         const off = style === 'station' ? -6 : 0;
-        const v1 = (Math.random() * VR.BIOME_VARIANTS) | 0;
-        let v2 = (Math.random() * VR.BIOME_VARIANTS) | 0; if (v2 === v1) v2 = (v2 + 1) % VR.BIOME_VARIANTS;
+        const v1 = (this.rnd() * VR.BIOME_VARIANTS) | 0;
+        let v2 = (this.rnd() * VR.BIOME_VARIANTS) | 0; if (v2 === v1) v2 = (v2 + 1) % VR.BIOME_VARIANTS;
         put(`scen_${biomeKey}_${v1}`, off);
         put(`scen_${biomeKey}_${v2}`, -off, true);
       }
@@ -135,7 +148,7 @@
       // ---- content
       const safe = idx < C.SAFE_START_CHUNKS + 2;
       const plan = VR.Patterns.generate({
-        rnd: Math.random, difficulty, speed, safe, style,
+        rnd: this.rnd, difficulty, speed, safe, style,
         powerupChance: 0.16 + difficulty * 0.08,
       });
       chunk.pattern = plan.patternName;
@@ -338,6 +351,17 @@
       if (chunk) chunk.obstacles = chunk.obstacles.filter(x => x !== o);
     }
   }
+
+  /** Small deterministic PRNG (mulberry32). */
+  VR.seededRandom = function (seed) {
+    let a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
 
   VR.World = World;
 })();

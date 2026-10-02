@@ -342,6 +342,54 @@
     .hud-box .lbl { font-size: 9px; letter-spacing: .12em; }
     #pauseBtn { width: 40px; height: 40px; }
   }
+  /* ============================ CHALLENGE ============================ */
+  #challengeBtn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+  .vs-ico { font-size: 1.1em; line-height: 1; }
+  #challenge .card, #chresult .card { max-height: calc(100% - 24px); overflow-y: auto; }
+  .ch-intro { margin: -6px 0 0; text-align: center; font-size: 14px; color: var(--muted); line-height: 1.5; }
+  .ch-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+  .ch-field input { width: 100%; box-sizing: border-box; }
+  .ch-home { display: flex; flex-direction: column; gap: 14px; }
+  .ch-join { display: flex; flex-direction: column; gap: 6px; }
+  .ch-or { text-align: center; font-size: 13px; color: var(--muted); }
+  .ch-code-input { text-transform: uppercase; letter-spacing: .3em; font-family: 'Pixelify Sans', monospace; text-align: center; }
+  .ch-room { display: flex; flex-direction: column; gap: 8px; align-items: stretch; text-align: center; }
+  .ch-roomlbl { font-size: 12px; color: var(--muted); letter-spacing: .14em; }
+  .ch-roomcode { font-family: 'Pixelify Sans', monospace; font-weight: 700; font-size: 40px; letter-spacing: .25em; color: var(--lemon); text-shadow: 0 4px 0 var(--ink); }
+  .ch-link { font-size: 12px !important; min-width: 0; }
+  .ch-sharerow .btn { flex: 1; text-decoration: none; text-align: center; }
+  .ch-whats { background: #2bb24c; box-shadow: inset 0 3px 0 rgba(255,255,255,.22), inset 0 -6px 0 #1b7a33, 0 5px 0 var(--ink); }
+  .ch-vs { display: flex; align-items: center; justify-content: center; gap: 12px; font-family: var(--display); font-size: 20px; }
+  .ch-vs b { background: var(--panel-2); border: 3px solid var(--ink); padding: 4px 12px; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ch-vs span { color: var(--gold); font-weight: 700; }
+  .ch-status { margin: 0; min-height: 1.3em; text-align: center; font-size: 15px; line-height: 1.45; }
+  .ch-status.busy { color: var(--muted); }
+  .ch-status.busy::after { content: ''; display: inline-block; width: 8px; height: 8px; margin-inline-start: 8px; background: var(--lemon); animation: chblink .8s steps(2) infinite; }
+  .ch-status.good { color: #8be06a; }
+  .ch-status.bad { color: #ff8a80; }
+  @keyframes chblink { 50% { opacity: 0; } }
+  .vs-hud { width: fit-content; margin: 8px auto 0;
+    display: flex; align-items: center; gap: 10px; padding: 5px 12px 7px; font-family: var(--display); white-space: nowrap; max-width: calc(100vw - 24px); box-sizing: border-box; }
+  .vs-hud .vs-tag { font-size: 11px; color: var(--ink); background: var(--gold); padding: 1px 5px; font-weight: 700; }
+  .vs-hud b { font-size: 16px; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; color: var(--lemon); }
+  .vs-hud #vsScore { font-size: 20px; font-weight: 700; font-family: 'Pixelify Sans', monospace; }
+  .vs-hud.leading { border-color: #b8331f; }
+  .vs-gap { font-size: 14px; color: var(--muted); }
+  .vs-gap.ahead { color: #ff8a80; } .vs-gap.behind { color: #8be06a; } .vs-gap.out { color: var(--muted); text-decoration: line-through; }
+  .cr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cr-player { text-align: center; }
+  .cr-player .lbl { display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap; text-transform: none !important; letter-spacing: 0 !important; font-size: 14px !important; color: var(--text) !important; }
+  .cr-player .val { justify-content: center; font-size: 34px !important; }
+  .cr-player.lead { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold) inset; }
+  .cr-player.lead .val { color: var(--gold); }
+  .cr-dist { font-size: 13px; color: var(--muted); }
+  .cr-you, .cr-state { font-size: 10px; padding: 1px 5px; border: 2px solid var(--ink); background: var(--panel); color: var(--muted); }
+  .cr-state.live { background: #2bb24c; color: #fff; }
+  #crTitle.win { color: var(--gold); } #crTitle.lose { color: #ff8a80; }
+  #crAgain[disabled] { filter: grayscale(.7) brightness(.8); cursor: default; }
+  .vs-hud[hidden] { display: none !important; }
+  @media (max-width: 480px) { .vs-hud { gap: 7px; padding: 4px 9px 6px; } .vs-hud #vsScore { font-size: 17px; } .ch-roomcode { font-size: 32px; } .cr-player .val { font-size: 26px !important; } }
+
   @media (prefers-reduced-motion: reduce) { .newbest, .loadbar div { animation: none; } }
 </style>
 </head>
@@ -364,6 +412,7 @@
       <div class="chip panel"><span class="coin-ico"></span><span id="menuBank">0</span></div>
     </div>
     <button class="btn primary" id="playBtn" data-i18n="menu.play">PLAY</button>
+    <button class="btn lemon" id="challengeBtn"><span class="vs-ico" aria-hidden="true">⚔</span> <span data-i18n="menu.challenge">CHALLENGE A FRIEND</span></button>
     <div class="menu-row">
       <button class="btn" id="charBtn" data-i18n="menu.character">CHARACTER</button>
       <button class="btn" id="settingsBtn" data-i18n="menu.settings">SETTINGS</button>
@@ -408,6 +457,9 @@
       <button class="btn" id="pauseBtn" data-i18n-aria="hud.pause" aria-label="Pause"><i></i></button>
     </div>
   </div>
+  <div id="vsHud" class="vs-hud panel" hidden>
+    <span class="vs-tag" data-i18n="ch.vs">VS</span><b id="vsName"></b><span id="vsScore" class="num">0</span><span id="vsGap" class="vs-gap"></span>
+  </div>
   <div id="powerbars"></div>
 </div>
 <div id="toast" dir="auto"></div>
@@ -416,6 +468,55 @@
 <div id="mission-ui" hidden></div>
 <div id="countdown" hidden>3</div>
 <div id="fade" hidden></div>
+
+<!-- CHALLENGE LOBBY -->
+<section id="challenge" class="screen dim" hidden>
+  <div class="card panel ch-card">
+    <h2 class="heading" data-i18n="ch.title">Challenge a friend</h2>
+    <p class="ch-intro" data-i18n="ch.intro"></p>
+    <label class="ch-field"><span data-i18n="ch.name">Your name</span>
+      <input id="chName" class="code-input" type="text" maxlength="16" dir="auto" autocomplete="nickname" spellcheck="false"></label>
+    <div id="chHome" class="ch-home">
+      <button class="btn primary" id="chCreate" data-i18n="ch.create">CREATE INVITE</button>
+      <form id="chJoinForm" class="ch-join" autocomplete="off">
+        <label for="chCode" class="ch-or" data-i18n="ch.or">or type your friend's code</label>
+        <div class="code-row">
+          <input id="chCode" class="code-input ch-code-input" type="text" maxlength="6" dir="ltr" spellcheck="false" autocapitalize="characters" inputmode="text" data-i18n-ph="ch.codePh">
+          <button class="btn small" id="chJoin" type="submit" data-i18n="ch.join">JOIN</button>
+        </div>
+      </form>
+    </div>
+    <div id="chRoomBox" class="ch-room" hidden>
+      <div class="ch-roomlbl" data-i18n="ch.roomCode">Room code</div>
+      <div id="chRoom" class="ch-roomcode num"></div>
+      <div class="code-row"><input id="chLink" class="code-input ch-link" type="text" readonly dir="ltr"><button class="btn small" id="chCopy" type="button" data-i18n="ch.copy">COPY LINK</button></div>
+      <div class="menu-row ch-sharerow">
+        <a class="btn small ch-whats" id="chWhats" target="_blank" rel="noopener" data-i18n="ch.whatsapp">WHATSAPP</a>
+        <button class="btn small" id="chShare" type="button" data-i18n="ch.share">SHARE</button>
+      </div>
+    </div>
+    <div id="chVS" class="ch-vs" hidden><b id="chMe"></b><span data-i18n="ch.vs">VS</span><b id="chOpp"></b></div>
+    <p id="chStatus" class="ch-status" role="status" aria-live="polite"></p>
+    <button class="btn primary" id="chStart" hidden data-i18n="ch.start">START THE RACE</button>
+    <button class="btn" id="chBack" data-i18n="ch.back">BACK</button>
+  </div>
+</section>
+
+<!-- CHALLENGE RESULT -->
+<section id="chresult" class="screen dim" hidden>
+  <div class="card panel ch-card">
+    <h2 class="heading" id="crTitle"></h2>
+    <div class="cr-grid">
+      <div class="result cr-player" id="crMe"><div class="lbl"><span id="crMeName"></span> <span class="cr-you" data-i18n="ch.you">You</span></div>
+        <div class="val" id="crMeScore">0</div><div class="cr-dist" id="crMeDist"></div></div>
+      <div class="result cr-player" id="crOpp"><div class="lbl"><span id="crOppName"></span> <span id="crOppState" class="cr-state"></span></div>
+        <div class="val" id="crOppScore">0</div><div class="cr-dist" id="crOppDist"></div></div>
+    </div>
+    <p id="crStatus" class="ch-status" role="status" aria-live="polite"></p>
+    <button class="btn primary" id="crAgain" data-i18n="ch.r.again">REMATCH</button>
+    <button class="btn" id="crMenu" data-i18n="ch.r.menu">MAIN MENU</button>
+  </div>
+</section>
 
 <!-- PAUSE -->
 <section id="pause" class="screen dim" hidden>
@@ -478,6 +579,9 @@
 <script src="js/missions/data.js"></script>
 <script src="js/missions/missionui.js"></script>
 <script src="js/missions/missions.js"></script>
+<script src="lib/mqtt.min.js"></script>
+<script src="js/challenge/net.js"></script>
+<script src="js/challenge/challenge.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>
