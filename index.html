@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <title>ليمونات</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0e111a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ليمونات">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Chakra+Petch:wght@500;700&family=Reem+Kufi:wght@500;700&family=Tajawal:wght@400;500;700&display=swap">
 <style>
@@ -501,6 +509,21 @@
   }
   @media (max-width: 560px) { .du-name { font-size: 14px; max-width: 24vw; } .du-timer { font-size: 26px; } .du-pips i { width: 8px; height: 8px; } .du-side { gap: 5px; padding: 4px 6px 5px; } }
 
+  /* ---------- fullscreen ---------- */
+  .fs-ico { display: inline-block; width: 16px; height: 16px; position: relative; flex: none;
+    background: linear-gradient(var(--text), var(--text)) 0 0 / 6px 3px no-repeat, linear-gradient(var(--text), var(--text)) 0 0 / 3px 6px no-repeat,
+      linear-gradient(var(--text), var(--text)) 100% 0 / 6px 3px no-repeat, linear-gradient(var(--text), var(--text)) 100% 0 / 3px 6px no-repeat,
+      linear-gradient(var(--text), var(--text)) 0 100% / 6px 3px no-repeat, linear-gradient(var(--text), var(--text)) 0 100% / 3px 6px no-repeat,
+      linear-gradient(var(--text), var(--text)) 100% 100% / 6px 3px no-repeat, linear-gradient(var(--text), var(--text)) 100% 100% / 3px 6px no-repeat; }
+  .fs-on .fs-ico { transform: scale(.75); }
+  .fs-btn { min-width: 0; width: 46px; height: 46px; padding: 0; display: grid; place-items: center; }
+  .fs-corner { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 14px; }
+  [dir="rtl"] .fs-corner { left: auto; right: 14px; }
+  .fs-wide { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+  .fs-ios { margin: -6px 0 0; text-align: start; font-size: 12px; }
+  .mi-fsbtn { width: 44px; padding: 0; display: grid; place-items: center; }
+  .no-fs .fs-btn, .no-fs .fs-wide, .no-fs .mi-fsbtn, .no-fs .du-fsbtn { display: none !important; }
+
   @media (prefers-reduced-motion: reduce) { .newbest, .loadbar div { animation: none; } }
 </style>
 </head>
@@ -516,6 +539,7 @@
 
 <!-- MAIN MENU -->
 <section id="menu" class="screen" hidden>
+  <button class="btn fs-btn fs-corner" id="fsMenu" data-i18n-aria="fs.enter" aria-label="Fullscreen"><i class="fs-ico"></i></button>
   <h1 class="title"><span class="brand"><canvas class="lemon-ico" width="16" height="16" aria-hidden="true"></canvas><span class="name" dir="rtl" lang="ar">ليمونات</span></span><small data-i18n="app.subtitle">Endless Block Runner</small></h1>
   <div class="menu-buttons">
     <div class="stats-strip">
@@ -551,6 +575,8 @@
     <div class="setting"><span data-i18n="settings.quality">Graphics</span><button class="btn toggle" id="optQuality" aria-pressed="true">HIGH</button></div>
     <div class="setting"><span data-i18n="settings.fps">Show FPS</span><button class="btn toggle" id="optFps" aria-pressed="false">OFF</button></div>
     <div class="setting"><span data-i18n="settings.online">Online challenges</span><button class="btn toggle" id="optOnline" aria-pressed="true">ON</button></div>
+    <div class="setting"><span data-i18n="settings.full">Fullscreen</span><button class="btn toggle" id="optFull" aria-pressed="false">OFF</button></div>
+    <p class="hint fs-ios" id="fsIos" hidden data-i18n="fs.ios"></p>
     <div class="setting"><span data-i18n="settings.lang">Language</span><button class="btn toggle lang-toggle" id="optLang" lang="">English</button></div>
     <button class="btn" id="settingsDone" data-i18n="settings.back">BACK</button>
   </div>
@@ -637,6 +663,7 @@
     <h2 class="heading" data-i18n="pause.title">Paused</h2>
     <button class="btn primary" id="resumeBtn" data-i18n="pause.resume">RESUME</button>
     <button class="btn" id="pauseSettings" data-i18n="pause.settings">SETTINGS</button>
+    <button class="btn fs-wide" id="fsPause"><i class="fs-ico"></i> <span data-i18n="fs.enter">Fullscreen</span></button>
     <button class="btn" id="pauseMenu" data-i18n="pause.menu">MAIN MENU</button>
   </div>
 </section>

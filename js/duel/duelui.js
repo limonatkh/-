@@ -267,7 +267,9 @@
         <h2 class="heading">${T('du.pauseTitle')}</h2>
         <p class="du-sub">${T('du.pauseNote')}</p>
         <button class="btn primary" id="duResume">${T('du.resume')}</button>
+        <button class="btn fs-wide du-fsbtn" id="duFs"><i class="fs-ico"></i> ${VR.Fullscreen.isOn() ? T('fs.exit') : T('fs.enter')}</button>
         <button class="btn" id="duForfeit">${T('du.forfeit')}</button>`;
+      this.el.card.querySelector('#duFs').addEventListener('click', (e) => { VR.Audio.play('click'); VR.Fullscreen.toggle(); e.currentTarget.lastChild.textContent = ' ' + (VR.Fullscreen.isOn() ? T('fs.enter') : T('fs.exit')); });
       this.el.card.querySelector('#duResume').addEventListener('click', () => { VR.Audio.play('click'); onResume(); });
       this.el.card.querySelector('#duForfeit').addEventListener('click', () => { VR.Audio.play('click'); onForfeit(); });
       this.el.overlay.hidden = false;

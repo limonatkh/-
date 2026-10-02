@@ -120,6 +120,89 @@
   };
 
   // ------------------------------------------------------------------
+  // MR. FRIDGE — from the user's drawing: a tall white fridge. The top
+  // (freezer) door is the head with the face: arched brows, sleepy dash
+  // eyes, a small round "o" mouth. The bottom door is the body with a
+  // shirt collar and a long grey tie. White shirt sleeves with mitten
+  // hands, two black shoes, grey shading down the right side.
+  // ------------------------------------------------------------------
+  function fridgeHead() {
+    const b = [
+      [-4.0, 0, -2.6, 8.0, 8.4, 5.2, 'skin'],                   // freezer door
+      [-3.7, 8.4, -2.35, 7.4, 0.45, 4.7, 'skin'],               // rounded top
+      [3.95, 0.1, -2.5, 0.15, 8.2, 5.0, 'shade'],               // right side shading
+      [3.75, 8.4, -2.3, 0.1, 0.4, 4.6, 'shade'],
+    ];
+    for (const s of [-1, 1]) {
+      const cx = s * 1.9;
+      // arched eyebrow: a flat top and two short drops
+      b.push([cx - 0.75, 5.75, -2.75, 1.5, 0.22, 0.15, 'ink']);
+      b.push([cx - 1.05, 5.35, -2.75, 0.35, 0.45, 0.15, 'ink']);
+      b.push([cx + 0.7, 5.45, -2.75, 0.3, 0.35, 0.15, 'ink']);
+      // sleepy eye
+      b.push([cx - 0.65, 4.35, -2.75, 1.3, 0.28, 0.15, 'ink']);
+    }
+    // small round mouth
+    b.push([-0.5, 2.3, -2.75, 1.0, 1.1, 0.15, 'ink']);
+    b.push([-0.25, 2.55, -2.82, 0.5, 0.6, 0.1, 'eyeWhite']);
+    return b;
+  }
+  function fridgeLeg(s) {
+    return [
+      [-0.45, -1.2, -0.4, 0.9, 1.3, 0.8, 'ink'],               // short stub under the fridge
+      [s * 0.4 - 1.6, -2.0, -2.4, 3.2, 0.9, 3.8, 'shoe'],      // big black shoe
+      [s * 0.4 - 1.3, -1.25, -2.1, 2.6, 0.35, 3.0, 'shoe'],
+    ];
+  }
+  function fridgeArm(s) {
+    return [
+      [-0.85, -5.6, -0.85, 1.7, 5.9, 1.7, 'shirt'],            // sleeve
+      [-0.9, -5.75, -0.9, 1.8, 0.2, 1.8, 'shade'],             // cuff
+      [-0.8, -7.3, -0.8, 1.6, 1.6, 1.6, 'skin'],               // mitten
+      [s * 0.75 - 0.25, -7.8, -0.6, 0.5, 0.7, 0.5, 'skin'],    // fingers
+      [-0.15, -7.9, -0.6, 0.45, 0.8, 0.5, 'skin'],
+      [s > 0 ? 0.75 : -0.85, -5.5, -0.8, 0.1, 5.6, 1.6, 'shade'],
+    ];
+  }
+  // first-person view: just the shirt cuff and the mitten (the full sleeve would fill the screen)
+  function fridgeFpArm(s) {
+    return [
+      [-0.85, -3.7, -0.85, 1.7, 1.3, 1.7, 'shirt'],
+      [-0.9, -3.85, -0.9, 1.8, 0.2, 1.8, 'shade'],
+      [-0.8, -5.0, -0.8, 1.6, 1.3, 1.6, 'skin'],
+      [s * 0.75 - 0.25, -5.4, -0.6, 0.5, 0.6, 0.5, 'skin'],
+      [-0.15, -5.4, -0.6, 0.45, 0.6, 0.5, 'skin'],
+    ];
+  }
+  const FRIDGE_MODEL = {
+    legL: { pivot: [-1.7, 2.0, 0], boxes: fridgeLeg(-1) },
+    legR: { pivot: [1.7, 2.0, 0], boxes: fridgeLeg(1) },
+    body: {
+      pivot: [0, 2.0, 0], boxes: [
+        [-4.0, 0, -2.6, 8.0, 9.5, 5.2, 'skin'],                 // fridge door
+        [3.95, 0.1, -2.5, 0.15, 9.3, 5.0, 'shade'],             // right side shading
+        // collar: a white V under the seam
+        [-1.4, 8.6, -2.72, 1.0, 0.3, 0.12, 'ink'],
+        [0.4, 8.6, -2.72, 1.0, 0.3, 0.12, 'ink'],
+        // tie: knot, then a long blade narrowing to a point
+        [-0.55, 8.4, -2.8, 1.1, 0.95, 0.2, 'tie'],
+        [-0.75, 7.0, -2.8, 1.5, 1.4, 0.2, 'tie'],
+        [-0.85, 5.6, -2.8, 1.7, 1.4, 0.2, 'tie'],
+        [-0.6, 4.6, -2.8, 1.2, 1.0, 0.2, 'tie'],
+        [-0.3, 3.9, -2.8, 0.6, 0.7, 0.2, 'tie'],
+        [0.05, 4.2, -2.86, 0.6, 5.1, 0.1, 'tieShade'],          // grey half of the tie
+      ],
+    },
+    head: { pivot: [0, 11.5, 0], boxes: fridgeHead() },
+    armL: { pivot: [-4.9, 10.6, 0], boxes: fridgeArm(-1) },
+    armR: { pivot: [4.9, 10.6, 0], boxes: fridgeArm(1) },
+  };
+  const FRIDGE_PALETTE = {
+    skin: 0xf6f6f3, shirt: 0xf2f2ee, shade: 0xc7c9cf, shoe: 0x161616, ink: 0x161616,
+    tie: 0xf2f2ee, tieShade: 0x9a9da6, eyeWhite: 0xffffff,
+  };
+
+  // ------------------------------------------------------------------
   // Character registry — shown in the Character menu.
   // ------------------------------------------------------------------
   VR.CHARACTERS = [
@@ -129,6 +212,13 @@
       outline: 0.32,
       noOutline: ['ink', 'shade', 'pupil', 'eyeWhite', 'hairShade', 'shoeShade'],
     },
+    {
+      id: 'fridge', name: { en: 'Mr. Fridge', ar: 'السيد ثلّاجة' }, tagline: { en: 'Cool-headed businessman', ar: 'رجل أعمال بارد الأعصاب' },
+      model: FRIDGE_MODEL, palette: FRIDGE_PALETTE,
+      fpArms: { armL: fridgeFpArm(-1), armR: fridgeFpArm(1) },
+      outline: 0.3,
+      noOutline: ['ink', 'shade', 'eyeWhite', 'tieShade'],
+    },
   ];
 
   const inkMaterial = new THREE.MeshBasicMaterial({ color: 0x161616, side: THREE.BackSide });
@@ -136,6 +226,27 @@
   // the per-face shading baked into the voxels (top > sides > bottom).
   const heroMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
   heroMaterial.color.setRGB(1.1, 1.1, 1.1);
+  heroMaterial.userData.hero = true;
+
+  /* Character TONES for two-player challenges: the host keeps the default
+   * white, the guest gets "سكني" (ash grey), so the two can't be mixed up.
+   * Only the light body colours change; black ink lines stay black. */
+  const TONES = { white: heroMaterial };
+  const greyMat = new THREE.MeshBasicMaterial({ vertexColors: true });
+  greyMat.color.setRGB(0.62, 0.64, 0.69); greyMat.userData.hero = true;
+  TONES.grey = greyMat;
+  VR.CHARACTER_TONES = { white: 1.1, grey: [0.62, 0.64, 0.69] };
+  /** Recolour a built rig: tone = 'white' | 'grey'. */
+  VR.toneCharacter = function (rig, tone) {
+    const m = TONES[tone] || heroMaterial;
+    rig.root.traverse(o => { if (o.isMesh && o.material && o.material.userData && o.material.userData.hero && !o.material.userData.ghost) o.material = m; });
+    rig.tone = tone;
+  };
+  /** Same colour as a multiplier, for materials that are clones (ghost, hands). */
+  VR.toneColor = function (color, tone) {
+    const t = VR.CHARACTER_TONES[tone] || VR.CHARACTER_TONES.white;
+    if (Array.isArray(t)) color.setRGB(t[0], t[1], t[2]); else color.setRGB(t, t, t);
+  };
 
   /**
    * Build a rigged voxel character.

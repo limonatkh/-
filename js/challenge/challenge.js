@@ -77,7 +77,7 @@
   // ---------------------------------------------------------------- ghost
   /** The other runner: a see-through copy of their character with a name tag. */
   class Ghost {
-    constructor(scene, charId) {
+    constructor(scene, charId, tone = 'white') {
       const def = VR.CHARACTERS.find(c => c.id === charId) || VR.CHARACTERS[0];
       this.p = new VR.Player(scene);
       this.p.setCharacter(def);
@@ -87,7 +87,11 @@
       this.p.rig.root.traverse((o) => {
         if (!o.isMesh) return;
         const swap = (m) => {
-          if (!cache.has(m)) { const c = m.clone(); c.transparent = true; c.opacity = 0.55; c.userData.own = true; cache.set(m, c); this.mats.push(c); }
+          if (!cache.has(m)) {
+            const c = m.clone(); c.transparent = true; c.opacity = 0.55; c.userData.own = true;
+            if (m.userData && m.userData.hero) VR.toneColor(c.color, tone);        // the other player's colour
+            cache.set(m, c); this.mats.push(c);
+          }
           return cache.get(m);
         };
         o.material = Array.isArray(o.material) ? o.material.map(swap) : swap(o.material);
@@ -367,6 +371,8 @@
       this.me = { dead: false, score: 0, again: false, passed: false };
       this.sendT = 0; this.hudT = 0;
       this.phase = 'countdown';
+      // automatic colours: the host keeps white, the guest runs in grey ("سكني")
+      VR.toneCharacter(this.game.player.rig, this.isHost ? 'white' : 'grey');
       this.makeGhost();
       this.game.startChallengeRun(seed);
       $('vsHud').hidden = false;
@@ -376,7 +382,7 @@
 
     makeGhost() {
       if (this.ghost) this.ghost.dispose(this.game.scene);
-      this.ghost = new Ghost(this.game.scene, this.opp.ch);
+      this.ghost = new Ghost(this.game.scene, this.opp.ch, this.isHost ? 'grey' : 'white');
       this.ghost.setName(this.oppName());
       this.ghost.visible(false);
     }
@@ -544,6 +550,7 @@
       this.link = null;
       if (this.ghost) { this.ghost.dispose(this.game.scene); this.ghost = null; }
       this.opp = null; this.me = null; this.round = 0; this.phase = 'idle'; this.isHost = false;
+      if (this.game.player && this.game.player.rig) VR.toneCharacter(this.game.player.rig, 'white');
       $('vsHud').hidden = true;
     }
     /** Leave the room (Back / Main menu / quitting a race). */

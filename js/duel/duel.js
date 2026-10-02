@@ -251,6 +251,7 @@
       this.match = {
         role, chan, did, me: role, op: OTHER[role],
         names: { [role]: this.myName(), [OTHER[role]]: chan.name },
+        tones: { h: 'white', g: 'grey' },          // automatic colours: inviter white, invited player grey
         chars: { [role]: this.myChar(), [OTHER[role]]: chan.ch },
         sc: { h: 0, g: 0 }, hp: { h: D.HP, g: D.HP }, round: 0, phase: 'enter', countT: 0, timeLeft: D.ROUND_TIME, endT: 0,
         readyMe: false, oppReady: false, readyT: 0, lastHeard: performance.now(), sendT: 0,
@@ -262,6 +263,8 @@
     /** game.js: the screen is black, build the arena and hand over. */
     enterArena() {
       const m = this.match; if (!m) return;
+      this.hands.setCharacter(VR.CHARACTERS[this.game.charIndex]);
+      this.hands.setTone(m.tones[m.me]);
       this.buildWorld();
       VR.Input.setMode('fp'); VR.Input.setFPEnabled(true); VR.Input.requestLock();
       this.ui.show(true);
@@ -318,9 +321,10 @@
       const m = this.match;
       const def = VR.CHARACTERS.find(c => c.id === m.chars[m.op]) || VR.CHARACTERS[0];
       const rig = VR.buildCharacter(def);
+      VR.toneCharacter(rig, m.tones[m.op]);
       const g = new T.Group(); g.add(rig.root);
       const gun = VR.DuelWeapons.sniper(m.op === 'h' ? VR.DuelArena.COLORS.h : VR.DuelArena.COLORS.g);
-      gun.scale.setScalar(1.5); gun.position.set(0.32, 1.02, -0.25);
+      gun.scale.setScalar(1.5); gun.position.set(def.model.armR.pivot[0] * VR.CHARACTER_PX + 0.02, 1.02, -0.32);
       g.add(gun);
       // team ring under the feet + name tag
       const col = VR.DuelArena.COLORS[m.op];

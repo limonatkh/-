@@ -96,6 +96,7 @@
       UI.setToggle('optQuality', s.quality === 'high', VR.t('high'), VR.t('low'));
       UI.setToggle('optFps', s.fps);
       UI.setToggle('optOnline', s.online);
+      if (VR.Fullscreen.supported()) UI.setToggle('optFull', VR.Fullscreen.isOn()); else UI.setToggle('optFull', false, '', VR.t('fs.na'));
       if (this.duel) VR.Online.setEnabled(!!s.online);
       const lb = document.getElementById('optLang');
       lb.textContent = VR.I18N.NAMES[VR.lang]; lb.lang = VR.lang;
@@ -138,6 +139,24 @@
       });
       UI.bind('optQuality', () => { this.settings.quality = this.settings.quality === 'high' ? 'low' : 'high'; this.applySettings(); });
       UI.bind('optFps', () => { this.settings.fps = !this.settings.fps; this.applySettings(); });
+      // fullscreen: menu corner, settings, pause menu (+ buttons in the mission and duel HUDs)
+      const fsToggle = () => { VR.Fullscreen.toggle(); this.settings.fullscreen = !VR.Fullscreen.isOn(); UI.store.set('settings', this.settings); };
+      UI.bind('fsMenu', fsToggle); UI.bind('optFull', fsToggle); UI.bind('fsPause', fsToggle);
+      const fsSync = () => {
+        const on = VR.Fullscreen.isOn();
+        document.documentElement.classList.toggle('fs-on', on);
+        UI.setToggle('optFull', on);
+        const pb = document.querySelector('#fsPause span'); if (pb) pb.textContent = VR.t(on ? 'fs.exit' : 'fs.enter');
+        setTimeout(() => this.resize(), 60);
+      };
+      document.addEventListener('fullscreenchange', fsSync); document.addEventListener('webkitfullscreenchange', fsSync);
+      if (!VR.Fullscreen.supported()) {
+        document.documentElement.classList.add('no-fs');
+        const b = document.getElementById('optFull'); b.disabled = true;
+        // iPhone: explain how to get a bar-free game (home-screen app)
+        document.getElementById('fsIos').hidden = VR.Fullscreen.standalone();
+      }
+      VR.I18N.onChange(fsSync);
       UI.bind('optOnline', () => { this.settings.online = !this.settings.online; this.applySettings(); });
       UI.bind('optLang', () => { VR.I18N.toggle(); });
       VR.I18N.onChange((lang, fontsReady) => {
@@ -219,6 +238,7 @@
 
     start() {
       VR.Audio.unlock();
+      if (this.settings.fullscreen) VR.Fullscreen.request();      // you chose fullscreen before: back to it on PLAY
       this.resetRun();
       // start from the menu's camera position for a smooth swoop in
       this.camera.position.copy(this.menuCamPos || this.camera.position);
@@ -682,15 +702,24 @@
       this.camBump += this.camBumpV * dt;
       const dist = C.CAMERA_DISTANCE + (this.portrait ? 1.2 : 0);
       const tx = p.x * 0.75;
-      const ty = C.CAMERA_HEIGHT + p.y * 0.62 + this.camBump + (this.portrait ? 2.6 : 0);
+      let ty = C.CAMERA_HEIGHT + p.y * 0.62 + this.camBump + (this.portrait ? 2.6 : 0);
       const tz = p.z + dist;
       const k = 1 - Math.exp(-dt * 7);
       const cam = this.camera.position;
+      // Tunnels: the roof is 5.9 m up. Keep the camera under it while the camera, the
+      // player or the stretch just ahead is inside a tunnel, so the view never ends up
+      // in the hill above (that hid the runner, worst in portrait and on trains).
+      const covered = this.tunnelCover(p.z - 12, cam.z + 1);
+      this.tunCam = (this.tunCam || 0) + ((covered ? 1 : 0) - (this.tunCam || 0)) * Math.min(1, dt * 6);
+      const cap = TUNNEL_CAM_MAX;
+      if (this.tunCam > 0.001) ty = ty + (Math.min(ty, cap) - ty) * this.tunCam;
       cam.x += (tx - cam.x) * k;
-      cam.y += (ty - cam.y) * (1 - Math.exp(-dt * 5));
+      cam.y += (ty - cam.y) * (1 - Math.exp(-dt * (covered ? 12 : 5)));
+      if (this.tunnelCover(cam.z - 0.5, cam.z + 0.5)) cam.y = Math.min(cam.y, cap);   // hard limit inside the tube
       cam.z += (tz - cam.z) * (1 - Math.exp(-dt * 12));
       this.camLook.x += (p.x * 0.85 - this.camLook.x) * k;
-      this.camLook.y += ((this.portrait ? 0.6 : 1.2) + p.y * 0.55 - this.camLook.y) * k;
+      const lookY = (this.portrait ? 0.6 : 1.2) + p.y * 0.55;
+      this.camLook.y += (lookY + ((this.portrait ? 1.0 : 1.2) + p.y * 0.55 - lookY) * (this.tunCam || 0) - this.camLook.y) * k;
       this.camLook.z = p.z - C.CAMERA_LOOK_AHEAD;
       if (this.shake > 0) {
         this.shake = Math.max(0, this.shake - dt);
@@ -698,6 +727,15 @@
         cam.x += (Math.random() - 0.5) * s; cam.y += (Math.random() - 0.5) * s;
       }
       this.camera.lookAt(this.camLook);
+    }
+
+    /** Is any part of the track between z0 (ahead) and z1 (behind) a tunnel? */
+    tunnelCover(z0, z1) {
+      for (const c of this.world.chunks) {
+        if (!c.style.startsWith('tunnel')) continue;
+        if (c.z0 >= z0 && c.z0 - C.CHUNK_LENGTH <= z1) return true;
+      }
+      return false;
     }
 
     // menu: character faces the camera, slow orbit, idle bob
@@ -731,6 +769,7 @@
     }
   }
   const TUNNEL_COLOR = new THREE.Color(0x1a1714);
+  const TUNNEL_CAM_MAX = 4.9;           // tunnel roof is at 5.9 m
 
   VR.Game = Game;
 

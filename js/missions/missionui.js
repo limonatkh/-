@@ -36,6 +36,7 @@
           <div class="mi-topright">
             <div class="mi-timer panel" id="mi-timer" hidden></div>
             <button class="btn small mi-iconbtn" id="mi-journal-btn" data-i18n-aria="mi.journal" aria-label="${T('mi.journal')}"><span class="mi-key">J</span><span class="mi-jlabel" data-i18n="mi.journal">${T('mi.journal')}</span></button>
+            <button class="btn small mi-iconbtn mi-fsbtn" id="mi-fs-btn" data-i18n-aria="fs.enter" aria-label="${T('fs.enter')}"><i class="fs-ico"></i></button>
             <button class="btn small mi-iconbtn" id="mi-pause-btn" data-i18n-aria="mi.k.pause" aria-label="${T('mi.k.pause')}"><i class="mi-pausei"></i></button>
           </div>
           <div class="mi-cross" id="mi-cross"></div>
@@ -65,6 +66,7 @@
       };
       $('#mi-journal-btn').addEventListener('click', () => { VR.Audio.play('click'); this.mgr.openJournal(); });
       $('#mi-pause-btn').addEventListener('click', () => { VR.Audio.play('click'); this.mgr.pause(); });
+      $('#mi-fs-btn').addEventListener('click', (e) => { e.stopPropagation(); VR.Audio.play('click'); VR.Fullscreen.toggle(); });
       window.addEventListener('keydown', (e) => this.onKey(e));
       this.buildTouch();
     }

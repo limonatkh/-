@@ -397,6 +397,20 @@ disconnects (no message for 7 s), the other wins and returns; the arena is torn 
 
 Tuning numbers are in `VR.DUEL` at the top of `duel.js`.
 
+
+## Characters, colours, fullscreen
+
+- **Characters:** Hero (default) and **Mr. Fridge** (`character.js`). A character can define
+  `fpArms` for simpler first-person hands (the fridge shows only cuff + mitten).
+- **Automatic challenge colours:** in a race or a 1v1 duel the inviter/host stays **white**
+  and the other player is **grey** ("سكني"): runner, race ghost, duel body and first-person
+  hands. Everything goes back to white when the challenge ends (`VR.toneCharacter`).
+- **Fullscreen:** button in the menu corner, Settings toggle, pause menu, mission HUD and duel
+  pause card. Once chosen, PLAY and "Start mission" go back to fullscreen. iPhone Safari has no
+  page fullscreen: Settings explains "Add to Home Screen" (`manifest.webmanifest`, display fullscreen).
+- **Tunnel camera:** the runner camera is held under the tunnel roof (5.9 m) while it, the
+  player or the stretch just ahead is in a tunnel (`Game.tunnelCover`).
+
 ## Performance notes
 
 - Every model is built once and pooled (`VR.Pool`); spawned objects share

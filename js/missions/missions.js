@@ -66,6 +66,8 @@
       this.run = new (MS().MissionRun)(def, this);
       this.run.go('entering');
       this.hands.hold(null);
+      this.hands.setCharacter(VR.CHARACTERS[this.game.charIndex]);
+      this.hands.setTone('white');
       this.buildWorld(def);
       VR.Input.setMode('fp'); VR.Input.setFPEnabled(false);
       this.ui.show(true);
@@ -73,6 +75,8 @@
       this.ui.showIntro(def, this.defs.length, () => this.startActive());
     }
     startActive() {
+      // "Start mission" is a tap: a good moment to go fullscreen if you chose it
+      if (this.game.settings.fullscreen) VR.Fullscreen.request();
       this.ui.close();
       if (this.run.state === 'entering') this.run.go('active');
       VR.Input.setFPEnabled(true); VR.Input.requestLock();

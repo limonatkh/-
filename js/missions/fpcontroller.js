@@ -282,14 +282,35 @@
       this.held = null;
       this.build(VR.CHARACTERS[0]);
     }
+    /** Use the hands of another character (rebuilds the arms). */
+    setCharacter(def) {
+      if (this.def === def) return;
+      if (this.held) { this.socket.remove(this.held); this.held = null; }
+      for (const h of this.hands) this.root.remove(h);
+      this.hands = [];
+      this.build(def);
+    }
+    /** 'white' (default) or 'grey' for two-player challenges. */
+    setTone(tone) { this.tone = tone; VR.toneColor(this.mat.color, tone); this.baseColor = this.mat.color.clone(); }
     build(def) {
+      this.def = def;
+      // a character can give simpler arms for the first-person view (def.fpArms)
+      if (def.fpArms) {
+        const model = Object.assign({}, def.model);
+        for (const k of ['armL', 'armR']) model[k] = { pivot: def.model[k].pivot, boxes: def.fpArms[k] };
+        def = Object.assign({}, def, { model });
+      }
       const rig = VR.buildCharacter(def);
       const base = new T.MeshBasicMaterial({ vertexColors: true });
-      this.mat = base;
+      this.mat = base; this.baseColor = new T.Color(1, 1, 1);
+      // line every character's hand up with the original mitten (its lowest point at -5.4 px)
+      let minY = 0;
+      for (const b of def.model.armR.boxes) minY = Math.min(minY, b[1]);
+      const lift = 0.37 + (-5.4 - minY) * VR.CHARACTER_PX;
       for (const side of ['armL', 'armR']) {
         const arm = rig.parts[side];
         arm.parent && arm.parent.remove(arm);
-        arm.position.set(0, 0.37, 0);
+        arm.position.set(0, lift, 0);
         arm.traverse(o => { if (o.isMesh && o.material && o.material.vertexColors) o.material = base; });
         const hand = new T.Group();
         hand.add(arm);
@@ -301,7 +322,7 @@
       this.hands[1].add(this.socket);
     }
     resize(aspect) { this.camera.aspect = aspect; this.camera.updateProjectionMatrix(); }
-    setBrightness(b) { this.mat.color.setScalar(b); this.hemi.intensity = 2.4 * b; this.key.intensity = 1.6 * b; }
+    setBrightness(b) { this.mat.color.copy(this.baseColor).multiplyScalar(b); this.hemi.intensity = 2.4 * b; this.key.intensity = 1.6 * b; }
     hold(model) {
       if (this.held) { this.socket.remove(this.held); this.held = null; }
       if (model) { this.held = model; model.scale.setScalar(0.75); model.rotation.set(0.3, 0.6, 0); this.socket.add(model); }

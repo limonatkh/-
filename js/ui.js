@@ -22,6 +22,30 @@
     });
   });
 
+  /* ---- Fullscreen: the browser's own bars (and swipes near them) steal
+   * touches and the mouse; fullscreen gives the whole screen to the game.
+   * iPhone Safari has no fullscreen for pages: there, "Add to Home Screen"
+   * opens the game without browser bars (see manifest.webmanifest). */
+  const fsEl = () => document.documentElement;
+  VR.Fullscreen = {
+    supported() { const d = document; return !!(d.fullscreenEnabled || d.webkitFullscreenEnabled); },
+    isOn() { return !!(document.fullscreenElement || document.webkitFullscreenElement); },
+    request() {
+      if (!this.supported() || this.isOn()) return;
+      const el = fsEl();
+      try {
+        const p = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : el.webkitRequestFullscreen && el.webkitRequestFullscreen();
+        if (p && p.catch) p.catch(() => {});
+      } catch (e) { /* refused */ }
+    },
+    exit() {
+      if (!this.isOn()) return;
+      try { const p = document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen && document.webkitExitFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ }
+    },
+    toggle() { if (this.isOn()) this.exit(); else this.request(); },
+    standalone() { return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true; },
+  };
+
   VR.UI = {
     store, fmt,
     show(name) {
