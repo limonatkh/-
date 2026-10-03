@@ -512,7 +512,7 @@
       const z = me.z - gap;
       if (gh.dead) {
         const before = p.z; p.animateDeath(dt); gh.deathDz += p.z - before;
-        p.z = z + gh.deathDz; p.object.position.z = p.z;
+        p.z = z + gh.deathDz; p.place();
       } else {
         const k = Math.min(1, dt * 14);
         p.x += (st.x - p.x) * k;

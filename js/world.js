@@ -1,49 +1,56 @@
 /* =====================================================================
- * WORLD — endless procedural railway.
+ * WORLD — the endless voxel adventure world the runner crosses.
  * ---------------------------------------------------------------------
- * The world is a queue of 40 m chunks. Each chunk = track segment
- * (style: normal / station / bridge / tunnel), ground, two scenery
- * strips (biome) and the obstacles + collectibles from patterns.js.
- * Chunks are spawned ahead of the player and recycled behind them.
- * Every model comes from an object pool, so nothing is rebuilt at
- * runtime after the first few seconds.
+ * The world is a queue of 40 m SECTIONS (terrain.js): open valleys,
+ * canyons, mountain passes, ridges, forks around mountains, tunnels and
+ * bridges. Each section also gets a TURN (curvature) and a SLOPE, so the
+ * path winds and climbs (track.js). Gameplay stays in simple path space;
+ * everything is put into the 3D world through the track.
  *
- *   spawnChunk()      -> decides biome + style, asks Patterns for content
- *   surfaceAt()       -> what the player can stand on (trains, ramps...)
- *   collide()         -> front / side hits for the game rules
+ *   spawnChunk()  -> picks section + turn + slope, builds (or bends) the
+ *                    terrain, asks Patterns for obstacles/coins that fit
+ *                    the section's movement zones
+ *   surfaceAt()   -> what the player can stand on (trains, ramps...)
+ *   collide()     -> front / side hits for the game rules
+ *   canSwitch()   -> may the runner swipe from one lane to another here?
+ *   guide()       -> steer the runner when the terrain narrows ahead
  * ===================================================================== */
 (function () {
   const C = VR.CONFIG;
   const L = C.CHUNK_LENGTH;
-  const LW = C.LANE_WIDTH;
   const TRAIN_ACTIVATE = 72;      // moving trains start rolling when this close
   const TRAIN_SPEED_RATIO = 0.45; // relative to the player's speed
+  // turns: curvature (1/radius) and slopes (metres up per metre)
+  const TURNS = [0, 1 / 95, -1 / 95, 1 / 60, -1 / 60];
+  const SLOPES = [0.07, -0.07];
+  const MAX_HEADING = 1.25;       // keep the path winding, not looping (~72°)
 
   class World {
     constructor(scene, collectibles) {
       this.scene = scene;
       this.collect = collectibles;
       this.pool = new VR.Pool(scene);
+      this.track = new VR.Track();
+      VR.track = this.track;                       // one runner world: player / ghost / camera use it
       this.chunks = [];
       this.obstacles = [];
       this.prefabs = {};
+      this.builders = {};
       this.definePools();
     }
 
     prefab(key, buildFn) {
-      if (!this.prefabs[key]) this.prefabs[key] = buildFn().build();
+      if (!this.prefabs[key]) this.prefabs[key] = (buildFn || this.builders[key])().build();
       return this.prefabs[key];
     }
     lazyPool(key, buildFn) {
+      this.builders[key] = buildFn;
       if (!this.pool.has(key)) this.pool.define(key, () => VR.clonePrefab(this.prefab(key, buildFn)));
     }
 
     definePools() {
-      for (const s in VR.TRACK_STYLES) this.lazyPool('track_' + s, VR.TRACK_STYLES[s]);
       for (const b in VR.BIOMES) {
         const biome = VR.BIOMES[b];
-        this.lazyPool('ground_' + b, () => VR.buildGround(biome));
-        this.lazyPool('water_' + b, () => VR.buildWater(biome));
         for (let v = 0; v < VR.BIOME_VARIANTS; v++) {
           this.lazyPool(`scen_${b}_${v}`, () => {
             const vb = new VR.VoxelBuilder();
@@ -53,27 +60,37 @@
             return vb;
           });
         }
+        // terrain of every section in every biome (built the first time it's needed)
+        for (const s in VR.SECTIONS) for (let v = 0; v < VR.Terrain.VARIANTS; v++) {
+          const key = VR.Terrain.terrainKey(s, b, v);
+          this.lazyPool(key, () => VR.SECTIONS[s].build(b, v + 1));
+        }
       }
       for (const t in VR.OBSTACLE_TYPES) this.lazyPool('obs_' + t, () => VR.OBSTACLE_TYPES[t].build());
       VR.TRAIN_COLORS.forEach((col, ci) => {
         for (const kind in VR.CAR_BUILDERS) this.lazyPool(`car_${kind}_${ci}`, () => VR.CAR_BUILDERS[kind](col));
       });
+      this.lazyPool('rails', () => VR.buildRails());
     }
 
-    // Build all prefabs up-front (called once behind the loading screen)
+    // Build the always-needed prefabs up-front (called once behind the loading screen)
     warmup() {
-      for (const key in this.pool.factories) { const o = this.pool.get(key); this.pool.release(o); }
+      for (const key in this.pool.factories) {
+        if (key.startsWith('terr_') && !key.includes('_open_')) continue;    // others: on first use
+        const o = this.pool.get(key); this.pool.release(o);
+      }
     }
 
     /**
      * seed: null for a normal run; a number for a challenge, so both players
-     * get exactly the same track, coins and power-ups.
+     * get exactly the same world: sections, turns, hills, obstacles, coins.
      */
     reset(seed = null) {
       while (this.chunks.length) this.releaseChunk(this.chunks[0]);
       this.seeded = seed !== null && seed !== undefined;
       this.rnd = this.seeded ? VR.seededRandom(seed) : Math.random;
       this.collect.clear();
+      this.track.reset();
       this.nextZ = 60;                // one chunk behind the player (visible from the menu camera)
       this.chunkIndex = 0;
       this.biomeOrder = VR.BIOME_ORDER.slice();
@@ -81,6 +98,8 @@
       this.biomeLeft = C.BIOME_MIN_CHUNKS;
       this.styleQueue = [];
       this.sinceSpecial = 0;
+      this.lastSection = 'open';
+      this.height = 0; this.heading = 0; this.slopeLeft = 0; this.slopeDir = 0;
       this.gates = [];
       this.nextGateChunk = C.MISSION_GATE_FIRST_CHUNK;
       this.duelGates = [];
@@ -89,20 +108,49 @@
 
     currentBiomeKey() { return this.biomeOrder[this.biomeIdx % this.biomeOrder.length]; }
 
-    nextStyle(biome, difficulty) {
+    /** Which section comes next (open valleys most of the time). */
+    nextSection(biome, biomeKey, difficulty) {
       if (this.styleQueue.length) return this.styleQueue.shift();
-      if (this.chunkIndex < 3 || this.sinceSpecial < 2) { this.sinceSpecial++; return 'normal'; }
-      const w = Object.assign({}, biome.styleWeights);
-      // "environmental complexity" rises with difficulty
-      w.tunnel *= 0.6 + difficulty; w.bridge *= 0.6 + difficulty; w.station *= 0.8 + difficulty * 0.5;
-      let r = this.rnd() * (w.normal + w.tunnel + w.bridge + w.station);
-      let s = 'normal';
-      for (const k of ['normal', 'tunnel', 'bridge', 'station']) { r -= w[k]; if (r <= 0) { s = k; break; } }
-      if (s === 'normal') { this.sinceSpecial++; return s; }
+      if (this.chunkIndex < 3 || this.sinceSpecial < 1) { this.sinceSpecial++; return 'open'; }
+      const w = {};
+      for (const k in VR.SECTIONS) {
+        const s = VR.SECTIONS[k];
+        let wt = s.weight(difficulty, biomeKey);
+        if (k === this.lastSection && s.restricted) wt = 0;                 // never the same narrow bit twice in a row
+        w[k] = wt;
+      }
+      w.tunnel_start = (biome.styleWeights.tunnel || 0) * (0.6 + difficulty);
+      w.bridge = (biome.styleWeights.bridge || 0) * (0.6 + difficulty);
+      let total = 0; for (const k in w) total += w[k];
+      let r = this.rnd() * total, s = 'open';
+      for (const k in w) { r -= w[k]; if (r <= 0) { s = k; break; } }
+      if (s === 'open') { this.sinceSpecial++; return s; }
       this.sinceSpecial = 0;
-      if (s === 'tunnel') { this.styleQueue.push('tunnel_end'); return 'tunnel_start'; }
-      if (s === 'bridge' && this.rnd() < 0.5) this.styleQueue.push('bridge');
+      if (s === 'tunnel_start') this.styleQueue.push('tunnel_end');
       return s;
+    }
+    /** How this section bends and climbs. */
+    nextShape(sec, idx) {
+      if (idx < 3) return { k: 0, slope: 0 };
+      let k = 0;
+      if (sec.turn && this.rnd() < 0.6) {
+        k = TURNS[1 + ((this.rnd() * 4) | 0)];
+        // lean back toward the main direction so the path snakes instead of looping
+        if (Math.abs(this.heading + k * L) > MAX_HEADING) k = -k;
+      }
+      let slope = 0;
+      if (sec.hill) {
+        if (this.slopeLeft > 0) { slope = this.slopeDir; this.slopeLeft--; }
+        else if (this.rnd() < 0.3) {
+          this.slopeDir = SLOPES[(this.rnd() * 2) | 0];
+          if (this.height + this.slopeDir * L * 2 > 14) this.slopeDir = -Math.abs(this.slopeDir);
+          if (this.height + this.slopeDir * L * 2 < -6) this.slopeDir = Math.abs(this.slopeDir);
+          this.slopeLeft = (this.rnd() * 2) | 0;
+          slope = this.slopeDir;
+        }
+      } else this.slopeLeft = 0;
+      this.heading += k * L; this.height += slope * L;
+      return { k, slope };
     }
 
     spawnChunk(difficulty, speed) {
@@ -114,7 +162,7 @@
         difficulty = 1 - Math.exp(-d / C.DIFFICULTY_RAMP);
         speed = C.SPEED_START + (C.SPEED_MAX - C.SPEED_START) * (1 - Math.exp(-d / C.SPEED_RAMP));
       }
-      // biome rotation (never switch mid-tunnel / mid-bridge)
+      // biome rotation (never switch mid-tunnel)
       if (this.biomeLeft <= 0 && !this.styleQueue.length) {
         this.biomeIdx++;
         this.biomeLeft = C.BIOME_MIN_CHUNKS + ((this.rnd() * (C.BIOME_MAX_CHUNKS - C.BIOME_MIN_CHUNKS)) | 0);
@@ -122,51 +170,60 @@
       this.biomeLeft--;
       const biomeKey = this.currentBiomeKey();
       const biome = VR.BIOMES[biomeKey];
-      const style = this.nextStyle(biome, difficulty);
+      const style = this.nextSection(biome, biomeKey, difficulty);
+      this.lastSection = style;
+      const sec = VR.SECTIONS[style];
+      const shape = this.nextShape(sec, idx);
       const z0 = this.nextZ;
       this.nextZ -= L;
+      const seg = this.track.add(z0, L, shape.k, shape.slope, sec);
 
-      const chunk = { id: idx, z0, style, biome: biomeKey, parts: [], obstacles: [] };
-      const put = (key, x = 0, flip = false) => {
-        const o = this.pool.get(key);
-        o.position.set(x, 0, z0);
-        if (flip) o.scale.x = -1;
-        chunk.parts.push(o);
-        return o;
-      };
-
-      put('track_' + style);
-      const isTunnel = style.startsWith('tunnel');
-      if (style === 'bridge') put('water_' + biomeKey);
-      else if (!isTunnel) {
-        put('ground_' + biomeKey);
-        const off = style === 'station' ? -6 : 0;
+      const chunk = { id: idx, z0, style, biome: biomeKey, parts: [], obstacles: [], seg, bent: null };
+      // ---- terrain (+ scenery strips in open valleys)
+      const tv = (this.rnd() * VR.Terrain.VARIANTS) | 0;
+      const parts = [{ key: VR.Terrain.terrainKey(style, biomeKey, tv), x: 0, flip: false }];
+      if (sec.scenery) {
         const v1 = (this.rnd() * VR.BIOME_VARIANTS) | 0;
         let v2 = (this.rnd() * VR.BIOME_VARIANTS) | 0; if (v2 === v1) v2 = (v2 + 1) % VR.BIOME_VARIANTS;
-        put(`scen_${biomeKey}_${v1}`, off);
-        put(`scen_${biomeKey}_${v2}`, -off, true);
+        parts.push({ key: `scen_${biomeKey}_${v1}`, x: 0, flip: false }, { key: `scen_${biomeKey}_${v2}`, x: 0, flip: true });
+      }
+      if (shape.k === 0 && shape.slope === 0) {
+        // straight & level: pooled models, just placed and turned
+        for (const pt of parts) {
+          const o = this.pool.get(pt.key);
+          this.track.place(o, pt.x, 0, z0);
+          if (pt.flip) o.scale.x = -1;
+          chunk.parts.push(o);
+        }
+      } else {
+        // curved / sloped: the section's voxels are bent along the path
+        const g = VR.bendGroup(parts.map(pt => ({ obj: this.prefab(pt.key), x: pt.x, flip: pt.flip })), shape.k, shape.slope);
+        g.position.copy(seg.P0); g.rotation.y = -seg.th0;
+        this.scene.add(g);
+        chunk.bent = g;
       }
 
       // ---- content
       const safe = idx < C.SAFE_START_CHUNKS + 2;
       const plan = VR.Patterns.generate({
-        rnd: this.rnd, difficulty, speed, safe, style,
+        rnd: this.rnd, difficulty, speed, safe, style, mask: sec.z ? sec.z.mask() : null,
         powerupChance: 0.16 + difficulty * 0.08,
       });
       chunk.pattern = plan.patternName;
+      const lx = (lane, pz) => this.track.laneXf(z0 - pz, lane);
 
       for (const o of plan.obstacles) {
         const def = VR.OBSTACLE_TYPES[o.type];
         const obj = this.pool.get('obs_' + o.type);
-        const x = o.lane * LW, z = z0 - o.z;
-        obj.position.set(x, 0, z);
-        this.addObstacle(chunk, { type: o.type, kind: def.kind, lane: o.lane, x, z, len: def.length, colliders: def.colliders, standable: def.standable, ramp: def.kind === 'ramp', parts: [obj] });
+        const z = z0 - o.z, x = lx(o.lane, o.z);
+        this.track.place(obj, x, 0, z);
+        this.addObstacle(chunk, { type: o.type, kind: def.kind, lane: o.lane, x, z, len: def.length, colliders: def.colliders, standable: def.standable, ramp: def.kind === 'ramp', parts: [obj], offs: [0] });
       }
       for (const t of plan.trains) this.spawnTrain(chunk, t, z0);
 
-      for (const c of plan.coins) this.collect.spawnCoin(c.x * LW, c.y, z0 - c.z, idx);
-      for (const c of plan.gems) this.collect.spawnGem(c.x * LW, c.y, z0 - c.z, idx);
-      for (const p of plan.powerups) this.collect.spawnPowerUp(p.type, p.x * LW, p.y, z0 - p.z, idx);
+      for (const c of plan.coins) this.collect.spawnCoin(lx(c.x, c.z), c.y, z0 - c.z, idx);
+      for (const c of plan.gems) this.collect.spawnGem(lx(c.x, c.z), c.y, z0 - c.z, idx);
+      for (const p of plan.powerups) this.collect.spawnPowerUp(p.type, lx(p.x, p.z), p.y, z0 - p.z, idx);
       this.maybeSpawnGate(chunk, plan, style, z0);
       this.maybeSpawnDuelGate(chunk, style, z0);
 
@@ -175,67 +232,73 @@
     }
 
     spawnTrain(chunk, t, z0) {
-      const x = t.lane * LW;
       const front = z0 - t.z;
-      const parts = [];
+      const x = this.track.laneX(front, t.lane);
+      const parts = [], offs = [];
       t.cars.forEach((car, i) => {
         const o = this.pool.get(`car_${car.kind}_${car.color}`);
-        o.position.set(x, 0, front - i * VR.CAR_LEN);
-        parts.push(o);
+        this.track.place(o, x, 0, front - i * VR.CAR_LEN);
+        parts.push(o); offs.push(-i * VR.CAR_LEN);
       });
+      // trains run on their own short rails (the world itself has no railway)
       const len = t.cars.length * VR.CAR_LEN;
+      if (t.moving) {
+        for (let z = 0; z < L; z += VR.CAR_LEN) { const r = this.pool.get('rails'); this.track.place(r, this.track.laneX(z0 - z, t.lane), 0, z0 - z); chunk.parts.push(r); }
+      } else {
+        for (let i = 0; i < t.cars.length; i++) { const r = this.pool.get('rails'); this.track.place(r, x, 0, front - i * VR.CAR_LEN); chunk.parts.push(r); }
+      }
       this.addObstacle(chunk, {
         type: 'train', kind: 'block', lane: t.lane, x, z: front, len,
         colliders: [{ x0: -1.12, x1: 1.12, y0: 0, y1: VR.TRAIN_HEIGHT, z0: -len + 0.15, z1: 0 }],
-        standable: !t.moving, parts,
+        standable: !t.moving, parts, offs,
         moving: t.moving ? { active: false, v: 0 } : null,
       });
       if (t.ramp) {
         const ro = this.pool.get('obs_ramp');
         const rz = z0 - t.rampZ;
-        ro.position.set(x, 0, rz);
-        this.addObstacle(chunk, { type: 'ramp', kind: 'ramp', lane: t.lane, x, z: rz, len: 7, colliders: [], standable: true, ramp: true, parts: [ro] });
+        this.track.place(ro, x, 0, rz);
+        this.addObstacle(chunk, { type: 'ramp', kind: 'ramp', lane: t.lane, x, z: rz, len: 7, colliders: [], standable: true, ramp: true, parts: [ro], offs: [0] });
       }
     }
 
     /* ---------------------------------------------------------------
      * Mission gates: an arch with a glowing lemon curtain, standing in
-     * one lane. Only placed in a lane whose track is clear for 24 m,
-     * so running through it is always safe; the run resumes from here.
+     * one lane of an open valley whose trail is clear for 24 m, so
+     * running through it is always safe; the run resumes from here.
      * ------------------------------------------------------------- */
     maybeSpawnGate(chunk, plan, style, z0) {
       chunk.gates = [];
       if (!this.gateProvider || chunk.id < this.nextGateChunk) return;
-      if (style !== 'normal' && style !== 'station') return;
+      if (!VR.SECTIONS[style].gateable) return;
       const lanes = [-1, 0, 1].filter(l => { for (let z = 8; z <= 32; z++) if (plan.grid[l + 1][z] !== 'F') return false; return true; });
       if (!lanes.length) { this.nextGateChunk = chunk.id + 1; return; }
       const def = this.gateProvider();
       if (!def) { this.nextGateChunk = chunk.id + 4; return; }
       const lane = lanes.includes(0) && Math.random() < 0.5 ? 0 : lanes[(Math.random() * lanes.length) | 0];
       const obj = this.gateObject(def);
-      const x = lane * LW, z = z0 - 22;
-      obj.position.set(x, 0, z);
+      const z = z0 - 22, x = this.track.laneX(z, lane);
+      this.track.place(obj, x, 0, z);
       const gate = { lane, x, z, missionId: def.id, parts: [obj], used: false, announced: false, chunk: chunk.id };
       chunk.gates.push(gate); this.gates.push(gate);
       // a short coin line leads into the gate
       for (let zl = 10; zl <= 20; zl += 2) {
-        if (!plan.coins.some(c => c.x === lane && Math.abs(c.z - zl) < 1.2)) this.collect.spawnCoin(x, 0.9, z0 - zl, chunk.id);
+        if (!plan.coins.some(c => c.x === lane && Math.abs(c.z - zl) < 1.2)) this.collect.spawnCoin(this.track.laneX(z0 - zl, lane), 0.9, z0 - zl, chunk.id);
       }
       this.nextGateChunk = chunk.id + C.MISSION_GATE_GAP_MIN + ((Math.random() * (C.MISSION_GATE_GAP_MAX - C.MISSION_GATE_GAP_MIN + 1)) | 0);
     }
-    /* 1v1 gate: on a platform beside the track (never in a lane), so it
+    /* 1v1 gate: on a platform beside the trail (never in the way), so it
      * never changes the run itself; only its prompt starts a challenge.
-     * Uses Math.random so a seeded challenge track stays identical. */
+     * Uses Math.random so a seeded challenge world stays identical. */
     maybeSpawnDuelGate(chunk, style, z0) {
       chunk.duelGates = [];
-      if (!this.duelGateProvider || chunk.id < this.nextDuelChunk || style !== 'normal') return;
+      if (!this.duelGateProvider || chunk.id < this.nextDuelChunk || !VR.SECTIONS[style].gateable) return;
       if (!this.duelGateProvider()) { this.nextDuelChunk = chunk.id + 2; return; }
       const side = Math.random() < 0.5 ? -1 : 1;
       const key = 'duelgate_' + VR.lang;
       if (!this.pool.has(key)) this.pool.define(key, () => VR.buildDuelGate());
       const obj = this.pool.get(key);
       const x = side * 6.9, z = z0 - 20;
-      obj.position.set(x, 0, z);
+      this.track.place(obj, x, 0, z);
       const gate = { x, z, side, parts: [obj], chunk: chunk.id };
       chunk.duelGates.push(gate); this.duelGates.push(gate);
       this.nextDuelChunk = chunk.id + 7 + ((Math.random() * 5) | 0);
@@ -248,18 +311,15 @@
     /** Language changed: swap every gate on the track for one with the new sign. */
     relabelGates() {
       for (const g of this.duelGates || []) {
-        const old = g.parts[0]; const pos = old.position.clone();
-        this.pool.release(old);
+        this.pool.release(g.parts[0]);
         const key = 'duelgate_' + VR.lang;
         if (!this.pool.has(key)) this.pool.define(key, () => VR.buildDuelGate());
-        const obj = this.pool.get(key); obj.position.copy(pos); g.parts[0] = obj;
+        g.parts[0] = this.track.place(this.pool.get(key), g.x, 0, g.z);
       }
       for (const g of this.gates) {
         const def = VR.MISSIONS.find(d => d.id === g.missionId); if (!def) continue;
-        const old = g.parts[0]; const pos = old.position.clone();
-        this.pool.release(old);
-        const obj = this.gateObject(def); obj.position.copy(pos);
-        g.parts[0] = obj;
+        this.pool.release(g.parts[0]);
+        g.parts[0] = this.track.place(this.gateObject(def), g.x, 0, g.z);
       }
     }
     animateGates(dt) {
@@ -277,6 +337,7 @@
 
     releaseChunk(chunk) {
       for (const p of chunk.parts) this.pool.release(p);
+      if (chunk.bent) { this.scene.remove(chunk.bent); VR.disposeBent(chunk.bent); chunk.bent = null; }
       for (const o of chunk.obstacles) for (const p of o.parts) this.pool.release(p);
       const set = new Set(chunk.obstacles);
       this.obstacles = this.obstacles.filter(o => !set.has(o));
@@ -285,15 +346,16 @@
       if (chunk.gates && chunk.gates.length) this.gates = this.gates.filter(g => !chunk.gates.includes(g));
       for (const g of chunk.duelGates || []) { for (const p of g.parts) this.pool.release(p); }
       if (chunk.duelGates && chunk.duelGates.length) this.duelGates = this.duelGates.filter(g => !chunk.duelGates.includes(g));
+      this.track.remove(chunk.seg);
       this.chunks.splice(this.chunks.indexOf(chunk), 1);
     }
 
     update(dt, player, speed, difficulty, game, keepBehind = false) {
       // stream chunks
       while (this.nextZ > player.z - C.CHUNKS_AHEAD * L) this.spawnChunk(difficulty, speed);
-      while (!keepBehind && this.chunks.length && this.chunks[0].z0 - L > player.z + 14) this.releaseChunk(this.chunks[0]);
+      while (!keepBehind && this.chunks.length && this.chunks[0].z0 - L > player.z + 30) this.releaseChunk(this.chunks[0]);
 
-      // moving trains
+      // moving trains roll toward the player along the path
       for (const o of this.obstacles) {
         if (!o.moving) continue;
         if (!o.moving.active && o.z - player.z > -TRAIN_ACTIVATE && o.z < player.z + 4) {
@@ -301,24 +363,50 @@
           game.onTrainApproach(o);
         }
         if (o.moving.active) {
-          const dz = o.moving.v * dt;
-          o.z += dz;
-          for (const p of o.parts) p.position.z += dz;
+          o.z += o.moving.v * dt;
+          o.parts.forEach((p, i) => this.track.place(p, o.x, 0, o.z + (o.offs ? o.offs[i] : 0)));
         }
       }
     }
 
-    // shift everything back toward the origin (float precision on long runs)
+    // keep path coordinates small on long runs (the world itself doesn't move)
     shift(dz) {
       this.nextZ += dz;
-      for (const c of this.chunks) { c.z0 += dz; for (const p of c.parts) p.position.z += dz; }
-      for (const o of this.obstacles) { o.z += dz; for (const p of o.parts) p.position.z += dz; }
-      for (const g of this.gates) { g.z += dz; for (const p of g.parts) p.position.z += dz; }
-      for (const g of this.duelGates) { g.z += dz; for (const p of g.parts) p.position.z += dz; }
+      this.track.shift(dz);
+      for (const c of this.chunks) c.z0 += dz;
+      for (const o of this.obstacles) o.z += dz;
+      for (const g of this.gates) g.z += dz;
+      for (const g of this.duelGates) g.z += dz;
       this.collect.shift(dz);
     }
 
     chunkAt(z) { for (const c of this.chunks) if (z <= c.z0 && z > c.z0 - L) return c; return null; }
+
+    // ---------------------------------------------------------------- movement zones
+    /** Can the runner swipe from lane a to lane b right now? (no rock, no ridge in between) */
+    canSwitch(p, a, b) { return this.track.canSwitch(p.z, a, b, 3); }
+    /**
+     * The terrain narrows ahead and the runner's lane ends: move them into the
+     * nearest lane that stays open (a funnel, not a crash). At a fork, the
+     * side they last swiped toward is kept.
+     */
+    guide(p) {
+      const tr = this.track;
+      for (const ahead of [9, 5, 2]) {
+        const z = p.z - ahead;
+        if (tr.isOpen(z, p.lane)) continue;
+        const open = tr.zoneAt(z).open;
+        if (!open.length) return;
+        let best = open[0], bestD = 9;
+        for (const l of open) {
+          let d = Math.abs(l - p.lane);
+          if (d === bestD && p.lastSide && Math.sign(l - p.lane) === p.lastSide) d -= 0.1;
+          if (d < bestD) { bestD = d; best = l; }
+        }
+        if (best !== p.lane) p.setLane(best);
+        return;
+      }
+    }
 
     /**
      * Highest walkable surface under the player.

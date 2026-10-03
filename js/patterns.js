@@ -8,6 +8,13 @@
  * an impossible wall of obstacles can never reach the player.
  *
  * Cell codes: F free · J jump · S slide · B block · R ramp/ride on train
+ *             X closed by the terrain (rock) · N reserved: free to run, but kept
+ *             clear of obstacles (the run-up before a corridor narrows)
+ *
+ * Terrain sections (terrain.js) pass a MASK: closed cells, reserved cells,
+ * walls between lanes, and "sep" cells where a lane has no neighbour to
+ * dodge into (canyon, fork corridors, behind a ridge). Lane changes never
+ * cross a wall; sep cells only take obstacles you can jump or slide.
  *
  * HOW TO ADD A PATTERN: write a function (g) => {...} using g.place /
  * g.train / g.moving and add it to PATTERNS with a weight function.
@@ -17,9 +24,13 @@
   const ZMIN = 6, ZMAX = 34;          // obstacles stay inside this band -> fair chunk seams
 
   class Plan {
-    constructor(rnd, diff, speed) {
+    constructor(rnd, diff, speed, mask) {
       this.rnd = rnd; this.diff = diff; this.speed = speed;
+      this.mask = mask || null;
       this.grid = [0, 1, 2].map(() => new Array(L).fill('F'));
+      if (mask) for (let i = 0; i < 3; i++) for (let z = 0; z < L; z++) {
+        if (mask.X[i][z]) this.grid[i][z] = 'X'; else if (mask.N[i][z]) this.grid[i][z] = 'N';
+      }
       this.obstacles = [];  // {type, lane, z}
       this.trains = [];     // {lane, z, cars:[{kind,color}], ramp, moving}
       this.coins = []; this.gems = []; this.powerups = [];
@@ -32,10 +43,25 @@
     }
     mark(lane, z0, z1, code) { for (let z = Math.floor(z0); z < Math.ceil(z1); z++) if (z >= 0 && z < L) this.grid[lane + 1][z] = code; }
     pick(arr) { return arr[(this.rnd() * arr.length) | 0]; }
+    /** is there a wall between lane a and lane b (neighbours) at cell z? */
+    wall(a, b, z) {
+      if (!this.mask) return false;
+      z = Math.floor(z); if (z < 0 || z >= L) return false;
+      return Math.min(a, b) === -1 ? this.mask.wallL[z] : this.mask.wallR[z];
+    }
+    /** cells of this lane where you can't step aside */
+    sepAny(lane, z0, z1) {
+      if (!this.mask) return false;
+      for (let z = Math.max(0, Math.floor(z0)); z < Math.min(L, Math.ceil(z1)); z++) if (this.mask.sep[lane + 1][z]) return true;
+      return false;
+    }
+    openAll(lane) { for (let z = 0; z < L; z++) if (this.grid[lane + 1][z] === 'X') return false; return true; }
 
     place(type, lane, z) {
       const def = VR.OBSTACLE_TYPES[type];
       if (z < ZMIN || z + def.length > ZMAX + 1) return false;
+      // where you can't step aside, only obstacles you can jump or slide under
+      if (def.kind === 'block' && this.sepAny(lane, z - 2, z + def.length + 2)) return false;
       // keep a clear run-up before/after so actions never overlap
       if (!this.free(lane, z - 2, z + def.length + 2)) return false;
       this.mark(lane, z, z + Math.max(1, def.length), def.kind === 'jump' ? 'J' : def.kind === 'slide' ? 'S' : 'B');
@@ -47,6 +73,7 @@
       const len = nCars * VR.CAR_LEN + (ramp ? 7 : 0);
       if (z < ZMIN || z + len > ZMAX) return false;
       if (!this.free(lane, z - 1, z + len + 1)) return false;
+      if (this.sepAny(lane, z - 1, z + len + 1)) return false;
       const colors = VR.TRAIN_COLORS;
       const col = (this.rnd() * colors.length) | 0;
       const cars = [];
@@ -60,11 +87,15 @@
       return true;
     }
     moving(lane, z, nCars) {
+      // an oncoming train needs its lane open the whole way and room to step aside
+      if (!this.openAll(lane) || this.sepAny(lane, 0, L)) return false;
+      for (let k = 0; k < L; k++) if (this.grid[lane + 1][k] !== 'F' && this.grid[lane + 1][k] !== 'N') return false;
       this.mark(lane, 0, L, 'B');   // whole lane is dangerous
       const col = (this.rnd() * VR.TRAIN_COLORS.length) | 0;
       const cars = [{ kind: 'loco', color: col }];
       for (let i = 1; i < nCars; i++) cars.push({ kind: 'passenger', color: col });
       this.trains.push({ lane, z, cars, ramp: false, moving: true });
+      return true;
     }
   }
 
@@ -73,7 +104,7 @@
     const step = Math.max(3.5, plan.speed * 0.2);   // metres needed per lane change
     const since = [-100, -100, -100];               // z since which each lane is reachable (null = no)
     for (let z = 0; z < L; z++) {
-      for (let i = 0; i < 3; i++) if (since[i] !== null && plan.grid[i][z] === 'B') since[i] = null;
+      for (let i = 0; i < 3; i++) if (since[i] !== null && (plan.grid[i][z] === 'B' || plan.grid[i][z] === 'X')) since[i] = null;
       for (let pass = 0; pass < 2; pass++) {
         for (let i = 0; i < 3; i++) {
           if (since[i] !== null) continue;
@@ -82,7 +113,7 @@
             let ok = true;
             for (let k = Math.max(0, Math.floor(z - step)); k <= z; k++) {
               const c = plan.grid[i][k];
-              if (c === 'B' || (c === 'R' && plan.grid[m][k] !== 'R')) { ok = false; break; }
+              if (c === 'B' || c === 'X' || (c === 'R' && plan.grid[m][k] !== 'R') || plan.wall(i - 1, m - 1, k)) { ok = false; break; }
             }
             if (ok) { since[i] = z; break; }
           }
@@ -174,7 +205,7 @@
   // ------------------------------------------------------------------ coins
   function coinTrail(g, startLane, zFrom, zTo) {
     let lane = startLane;
-    const ahead = (l, z) => { for (let k = 0; k <= 5; k++) if (g.cell(l, z + k) === 'B') return false; return true; };
+    const ahead = (l, z) => { for (let k = 0; k <= 5; k++) { const c = g.cell(l, z + k); if (c === 'B' || c === 'X') return false; } return true; };
     const surf = (l, z) => {
       const t = g.trains.find(t => t.lane === l && !t.moving && t.ramp && z >= t.rampZ && z < t.z + t.cars.length * VR.CAR_LEN);
       if (!t) return null;
@@ -182,7 +213,7 @@
     };
     for (let z = zFrom; z < zTo; z += 2) {
       if (!ahead(lane, z)) {
-        const alt = [lane - 1, lane + 1].filter(l => l >= -1 && l <= 1 && ahead(l, z) && g.cell(l, z) !== 'R');
+        const alt = [lane - 1, lane + 1].filter(l => l >= -1 && l <= 1 && ahead(l, z) && g.cell(l, z) !== 'R' && !g.wall(lane, l, z) && !g.wall(lane, l, z - 1));
         if (!alt.length) { z += 4; continue; }
         const nl = g.pick(alt);
         g.coins.push({ x: (lane + nl) / 2, y: 0.9, z: z - 1, lanes: true });
@@ -202,13 +233,13 @@
   }
 
   function addCoins(g, safe) {
-    const start = g.pick([-1, 0, 1].filter(l => g.cell(l, 2) === 'F'));
+    const start = g.pick([-1, 0, 1].filter(l => g.cell(l, 2) === 'F' || g.cell(l, 2) === 'N'));
     coinTrail(g, start === undefined ? 0 : start, 2, L - 2);
     // risk / reward jump arc in a free lane
     if (g.rnd() < 0.4) {
       const l = g.pick([-1, 0, 1]);
       const z0 = 8 + g.rnd() * 20;
-      if (g.free(l, z0, z0 + 8) && !g.coins.some(c => c.x === l && Math.abs(c.z - z0 - 4) < 6)) {
+      if (g.free(l, z0 - 2, z0 + 10) && !g.coins.some(c => c.x === l && Math.abs(c.z - z0 - 4) < 6)) {
         for (let i = 0; i < 5; i++) { const d = (i - 2) / 2.2; g.coins.push({ x: l, y: 1.0 + 1.6 * (1 - d * d), z: z0 + i * 1.6, lanes: true }); }
       }
     }
@@ -229,14 +260,14 @@
     PATTERNS,
     verify,
     generate(ctx) {
-      const { rnd, difficulty, speed, safe, style } = ctx;
+      const { rnd, difficulty, speed, safe, style, mask } = ctx;
       let plan = null;
       for (let attempt = 0; attempt < 10 && !plan; attempt++) {
-        const g = new Plan(rnd, difficulty, speed);
+        const g = new Plan(rnd, difficulty, speed, mask);
         if (!safe) {
           let names = Object.keys(PATTERNS);
           if (style === 'tunnel_start' || style === 'tunnel_end') names = names.filter(n => n !== 'moving');
-          if (style === 'station') names = ['train', 'multitrain', 'train', 'coins'];
+          if (style === 'bridge') names = names.filter(n => n !== 'moving');
           const weights = names.map(n => Math.max(0, PATTERNS[n].weight(difficulty)));
           let r = rnd() * weights.reduce((a, b) => a + b, 0);
           let chosen = names[0];
@@ -246,7 +277,7 @@
         } else g.patternName = 'safe';
         if (verify(g)) plan = g;
       }
-      if (!plan) { plan = new Plan(rnd, difficulty, speed); plan.patternName = 'fallback'; }
+      if (!plan) { plan = new Plan(rnd, difficulty, speed, mask); plan.patternName = 'fallback'; }
       addCoins(plan, safe);
       if (!safe && rnd() < ctx.powerupChance && plan.coins.length > 6) {
         const i = 3 + ((rnd() * (plan.coins.length - 6)) | 0);

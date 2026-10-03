@@ -1,7 +1,9 @@
 /* =====================================================================
  * PLAYER CONTROLLER
- * Lanes, smooth lane switching, jump, slide, fast-fall, stumble and the
- * procedural run / jump / slide animation of the voxel rig.
+ * Movement zones (lanes the terrain allows), smooth switching, jump,
+ * slide, fast-fall, stumble and the procedural run / jump / slide
+ * animation of the voxel rig. The player lives in path space; the track
+ * puts the model into the winding world (VR.track.place).
  * Collision response is driven from game.js (see Game.resolveCollisions).
  * ===================================================================== */
 (function () {
@@ -18,7 +20,7 @@
         new THREE.PlaneGeometry(1, 1),
         new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false })
       );
-      sh.rotation.x = -Math.PI / 2;
+      sh.rotation.order = 'YXZ';
       this.shadow = sh; scene.add(sh);
 
       // shield bubble
@@ -41,7 +43,8 @@
     }
 
     reset() {
-      this.lane = 0; this.prevLane = 0;
+      this.lane = 0; this.prevLane = 0; this.lastSide = 1;
+      this.offset = 0;             // x relative to the current lane's centre (eases to 0)
       this.x = 0; this.y = 0; this.z = 0;
       this.vy = 0;
       this.grounded = true;
@@ -63,7 +66,13 @@
 
     get sliding() { return this.slideTimer > 0; }
     get height() { return this.sliding ? C.PLAYER_SLIDE_HEIGHT : C.PLAYER_HEIGHT; }
-    laneX(l) { return l * C.LANE_WIDTH; }
+    laneX(l) { return VR.track ? VR.track.laneX(this.z, l) : l * C.LANE_WIDTH; }
+    /** change lane, keeping the body where it is (it then slides over) */
+    setLane(nl) {
+      if (nl === this.lane) return;
+      this.prevLane = this.lane; this.lane = nl;
+      this.offset = this.x - this.laneX(nl);
+    }
 
     action(a, game) {
       if (this.dead) return;
@@ -71,8 +80,10 @@
         case 'left':
         case 'right': {
           const nl = this.lane + (a === 'left' ? -1 : 1);
-          if (nl < -1 || nl > 1) { game.onWallBump(); return; }
-          this.prevLane = this.lane; this.lane = nl;
+          this.lastSide = a === 'left' ? -1 : 1;           // also picks the side of a fork
+          // mountains and rock walls: the swipe is refused (no passing through terrain)
+          if (nl < -1 || nl > 1 || !game.world.canSwitch(this, this.lane, nl)) { game.onWallBump(); return; }
+          this.setLane(nl);
           VR.Audio.play('lane');
           break;
         }
@@ -91,8 +102,7 @@
 
     // bounce back after a side hit
     bounceBack() {
-      const l = this.lane;
-      this.lane = this.prevLane; this.prevLane = l;
+      if (!VR.track || VR.track.isOpen(this.z, this.prevLane)) this.setLane(this.prevLane);
       this.stumbleAnim = 0.45;
     }
 
@@ -102,13 +112,16 @@
       // forward
       this.z -= speed * dt;
 
-      // lateral (constant-speed approach feels crisp; easing is in the lean)
-      const tx = this.laneX(this.lane);
+      // the terrain narrows ahead -> funnel into a lane that stays open
+      world.guide(this);
+      // lateral: follow the lane (which itself moves where the terrain widens or
+      // splits); a lane change is a constant-speed slide of the offset (crisp)
       const maxStep = (C.LANE_WIDTH / C.LANE_SWITCH_TIME) * dt;
-      const dx = tx - this.x;
+      const o0 = this.offset;
+      this.offset -= Math.abs(this.offset) < maxStep ? this.offset : Math.sign(this.offset) * maxStep;
       this.prevX = this.x;
-      this.x += Math.abs(dx) < maxStep ? dx : Math.sign(dx) * maxStep;
-      this.lateralVel = (this.x - this.prevX) / Math.max(dt, 1e-4);
+      this.x = this.laneX(this.lane) + this.offset;
+      this.lateralVel = (this.offset - o0) / Math.max(dt, 1e-4);
 
       // vertical
       this.vy -= C.GRAVITY * dt;
@@ -148,7 +161,7 @@
     animate(dt, speed) {
       const r = this.rig; if (!r) return;
       const p = r.parts;
-      this.object.position.set(this.x, this.y, this.z);
+      this.place();
 
       this.runPhase += dt * (6 + speed * 0.42);
       const s = Math.sin(this.runPhase);
@@ -197,7 +210,8 @@
 
     updateShadow(world) {
       const g = world.surfaceAt(this.x, this.z, this.y + 0.01, C.PLAYER_HALF_WIDTH).h;
-      this.shadow.position.set(this.x, g + 0.04, this.z);
+      VR.track.toWorld(this.x, g + 0.04, this.z, this.shadow.position);
+      this.shadow.rotation.set(-Math.PI / 2, -VR.track.heading(this.z), 0);
       const hgt = Math.max(0, this.y - g);
       const sc = Math.max(0.35, 1 - hgt * 0.2);
       this.shadow.scale.set(sc * 1.05, sc * 0.9, 1);
@@ -208,14 +222,22 @@
     revive(d) {
       this.dead = false; this.deathTimer = 0;
       this.x = d.x; this.y = d.y; this.z = d.z;
-      this.lane = d.lane; this.prevLane = d.lane; this.prevX = d.x;
+      this.lane = d.lane; this.prevLane = d.lane; this.prevX = d.x; this.offset = 0;
+      if (VR.track && !VR.track.isOpen(this.z, this.lane)) this.lane = VR.track.zoneAt(this.z).open[0];
+      this.offset = this.x - this.laneX(this.lane);
       this.vy = 0; this.grounded = false; this.slideTimer = 0; this.pendingSlide = false;
       this.lastStumble = -99; this.stumbleAnim = 0;
       this.flash = 1.5;
       const r = this.rig;
       r.inner.rotation.set(0, 0, 0); r.inner.position.set(0, 0, 0);
       for (const k in r.parts) r.parts[k].rotation.set(0, 0, 0);
-      this.object.position.set(this.x, this.y, this.z);
+      this.place();
+    }
+
+    /** put the model into the world at the path position, facing along the run */
+    place() {
+      if (VR.track) VR.track.place(this.object, this.x, this.y, this.z);
+      else { this.object.position.set(this.x, this.y, this.z); this.object.rotation.set(0, 0, 0); }
     }
 
     die() {
@@ -229,7 +251,7 @@
       this.deathVy -= 30 * dt;
       this.y = Math.max(this.groundAtDeath || 0, this.y + this.deathVy * dt);
       this.z += dt * Math.max(0, 5 - this.deathTimer * 8);
-      this.object.position.set(this.x, this.y, this.z);
+      this.place();
       r.inner.rotation.x += (1.45 - r.inner.rotation.x) * Math.min(1, dt * 8);
       r.parts.armL.rotation.x = -2.8; r.parts.armR.rotation.x = -2.6;
       r.parts.legL.rotation.x = -0.4; r.parts.legR.rotation.x = 0.3;

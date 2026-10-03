@@ -67,16 +67,48 @@ same 6 part names.
 Collision size is independent of the model (`PLAYER_*` values in
 `js/config.js`), so a new look never changes gameplay.
 
-## 5. Where railway chunks are generated
+## 5. The adventure world (sections, turns, hills, movement zones)
 
-`js/world.js`
+The run is no longer a straight three-track railway. It crosses a voxel
+world of valleys, canyons, mountain passes, rock ridges, forks around a
+mountain, tunnels and bridges; the path turns and climbs. The terrain
+itself makes the way: there are no lines on the ground.
 
-- `World.spawnChunk()` — builds one 40 m chunk: track segment, ground,
-  scenery strips, then asks `Patterns` for the obstacles/coins.
-- `World.nextStyle()` — picks `normal`, `station`, `bridge` or a
-  two-chunk `tunnel`, weighted by biome and difficulty.
-- `World.update()` — streams chunks in ahead and recycles them behind.
-- Track segment models: `js/prefabs.js → TRACK` / `VR.TRACK_STYLES`.
+| Piece | File |
+|---|---|
+| Path: turns (curvature), slopes, path → world (`toWorld`, `heading`, `place`), bending a section's voxels onto the curve (`VR.bendGroup`) | `js/track.js` |
+| Movement zones, section list (`VR.SECTIONS`) and terrain builders | `js/terrain.js` |
+| Which section / turn / slope comes next, spawning, swipe rules (`canSwitch`), funnelling (`guide`) | `js/world.js` |
+| Obstacles / coins that fit the zones | `js/patterns.js` (`mask`) |
+
+**From three lanes to movement zones.** Gameplay still uses up to three
+internal positions (-1, 0, 1), but each section decides, metre by metre,
+which of them exist (`open`), where they are (`x`, e.g. 6.5 m apart at a
+fork), and where a rock wall separates two of them (`wallL` / `wallR`):
+
+- `open` valley: all three, wide.
+- `canyon`: only the middle corridor.
+- `pass_l` / `pass_r`: two corridors, one side is cliff.
+- `ridge_l` / `ridge_r`: three, but a rock ridge you can't cross.
+- `fork`: the trail splits around a mountain into two passes; swipe left
+  or right before the split to choose (the last swipe decides).
+- `tunnel_start/end`, `bridge`.
+
+A swipe into a closed position or across a wall is refused (bump, no
+move). When the terrain narrows, the runner is guided into the nearest
+open corridor 9 m before it happens. `Patterns` receives the section's
+grid (`X` = rock, `N` = no obstacles here, walls), so obstacles are never
+in the rock and every chunk still passes the fairness check.
+
+Gameplay (physics, collisions, coins, distance, score) stays in simple
+path coordinates; the track turns them into the 3D world, so the player
+model, the camera, coins and gates follow every turn and hill.
+
+**Adding a section:** add an entry to `VR.SECTIONS` in `js/terrain.js`
+with a zone spec (`makeZone({ close, walls, spread, sides })`), a
+`weight(difficulty, biome)`, `turn` / `hill` flags and `build()`.
+Races stay identical for both players: sections, turns and slopes come
+from the seeded random generator.
 
 ## 6. Where obstacles are generated
 
@@ -84,8 +116,8 @@ Collision size is independent of the model (`PLAYER_*` values in
 
 - `PATTERNS` — the chunk recipes: `coins` (A), `train` (B), `multitrain` (C),
   `mixed` (G), `hurdles` (full-width jump/slide rows), `moving` (oncoming train).
-  Tunnels (D), bridges (E) and stations (F) are track styles that combine
-  with these recipes.
+  Tunnels (D) and bridges (E) are world sections that combine with these
+  recipes; every recipe respects the section's movement zones.
 - `verify()` — the fairness check. It simulates a player changing lanes at
   the current speed and rejects any layout that can't be survived; the chunk
   is regenerated. Three blocked lanes can only happen when every lane has a

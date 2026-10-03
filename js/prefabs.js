@@ -111,6 +111,16 @@
     },
   };
 
+  /** One car-length of single rails (trains bring their own track in the adventure world). */
+  VR.buildRails = function () {
+    const vb = new VR.VoxelBuilder();
+    const len = VR.CAR_LEN || 7.5;
+    for (let z = -0.6; z > -len; z -= 1.25) vb.addBox(0, -0.05, z, 2.1, 0.12, 0.42, 'sleeper');
+    vb.addBox(-0.72, 0.03, -len / 2, 0.14, 0.12, len, 'iron');
+    vb.addBox(0.72, 0.03, -len / 2, 0.14, 0.12, len, 'iron');
+    return vb;
+  };
+
   VR.TRACK_STYLES = {
     normal: () => TRACK.normal(),
     station: () => TRACK.station(),

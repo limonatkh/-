@@ -64,6 +64,9 @@
       this.camera = new THREE.PerspectiveCamera(C.CAMERA_FOV, 1, 0.3, 260);
       this.camTarget = new THREE.Vector3();
       this.camLook = new THREE.Vector3();
+      // the runner camera works in path space (like the player) and is put into the
+      // winding world through the track, so it follows turns, climbs and descents
+      this.camPath = new THREE.Vector3(); this.lookPath = new THREE.Vector3();
       window.addEventListener('resize', () => this.resize());
       this.resize();
     }
@@ -236,6 +239,7 @@
       this.tunnelDark = 0;
       this.camera.position.set(0, C.CAMERA_HEIGHT, C.CAMERA_DISTANCE);
       this.camLook.set(0, 1.4, -C.CAMERA_LOOK_AHEAD);
+      this.camPath.copy(this.camera.position); this.lookPath.copy(this.camLook);   // start: path = world
       UI.clearPowerups();
       UI.setHUD(0, 0, 0, 1);
     }
@@ -246,6 +250,7 @@
       this.resetRun();
       // start from the menu's camera position for a smooth swoop in
       this.camera.position.copy(this.menuCamPos || this.camera.position);
+      this.camPath.copy(this.camera.position);
       this.setState('playing');
       if (this.settings.music) VR.Audio.startMusic();
       VR.Audio.setMusicVolume(1);
@@ -258,6 +263,7 @@
       this.resetRun(seed);
       this.world.update(0, this.player, C.SPEED_START, 0, this, true);
       this.camera.position.copy(this.menuCamPos || this.camera.position);
+      this.camPath.copy(this.camera.position);
       this.countdown = 3; this.countdownStar = 0;
       this.countdownEl.hidden = false; this.countdownEl.textContent = '3';
       this.setState('countdown');
@@ -392,10 +398,10 @@
       return {
         score: this.score, distance: this.distance, coins: this.coins, multiplier: this.multiplier, speed: this.speed,
         powerups: Object.assign({}, this.powerups.timers),
-        player: { x: p.x, y: p.y, z: p.z, lane: p.lane, prevLane: p.prevLane, grounded: p.grounded, lastStumble: p.lastStumble },
+        player: { x: p.x, y: p.y, z: p.z, lane: p.lane, prevLane: p.prevLane, grounded: p.grounded, lastStumble: p.lastStumble, lastSide: p.lastSide },
         usedCodes: [...this.usedCodes], canContinue: this.canContinue, hitCooldown: this.hitCooldown, lastBiome: this.lastBiome,
         world: { chunkIndex: this.world.chunkIndex, nextZ: this.world.nextZ, chunks: this.world.chunks.length, obstacles: this.world.obstacles.length },
-        camera: this.camera.position.toArray(), camLook: this.camLook.toArray(),
+        camPath: this.camPath.toArray(), lookPath: this.lookPath.toArray(),
       };
     }
     restoreRun(snap, rewards) {
@@ -404,15 +410,20 @@
       this.multiplier = snap.multiplier; this.speed = snap.speed;
       this.powerups.timers = Object.assign({}, snap.powerups);
       Object.assign(p, { x: snap.player.x, y: snap.player.y, z: snap.player.z, lane: snap.player.lane, prevLane: snap.player.prevLane,
-        vy: 0, grounded: true, slideTimer: 0, pendingSlide: false, lastStumble: snap.player.lastStumble, prevX: snap.player.x, lateralVel: 0 });
-      p.object.position.set(p.x, p.y, p.z);
+        vy: 0, grounded: true, slideTimer: 0, pendingSlide: false, lastStumble: snap.player.lastStumble, prevX: snap.player.x, lateralVel: 0,
+        lastSide: snap.player.lastSide || 1 });
+      p.offset = p.x - p.laneX(p.lane);
+      p.place();
       this.usedCodes = new Set(snap.usedCodes); this.canContinue = snap.canContinue; this.hitCooldown = snap.hitCooldown;
       // the world was frozen, so it must be exactly as we left it
       const w = this.world;
       this.restoreCheck = w.chunkIndex === snap.world.chunkIndex && w.nextZ === snap.world.nextZ && w.chunks.length === snap.world.chunks && w.obstacles.length === snap.world.obstacles;
       if (!this.restoreCheck) console.warn('[run] world changed during the mission', snap.world);
       if (rewards) { this.score += rewards.score; this.coins += rewards.coins; }
-      this.camera.position.fromArray(snap.camera); this.camLook.fromArray(snap.camLook);
+      this.camPath.fromArray(snap.camPath); this.lookPath.fromArray(snap.lookPath);
+      VR.track.toWorld(this.camPath.x, this.camPath.y, this.camPath.z, this.camera.position);
+      VR.track.toWorld(this.lookPath.x, this.lookPath.y, this.lookPath.z, this.camLook);
+      this.camera.lookAt(this.camLook);
       UI.setHUD(this.score, this.distance, this.coins, this.multiplier);
       UI.setPowerups(this.powerups);
     }
@@ -432,9 +443,9 @@
       const p = this.player;
       const k = Math.min(1, this.gateT / 0.3);              // TPP → FPV in 0.3 s
       const e = k * k * (3 - 2 * k);
-      const head = new THREE.Vector3(p.x, p.y + 1.5, p.z - 0.2);
+      const head = VR.track.toWorld(p.x, p.y + 1.5, p.z - 0.2);
       this.camera.position.lerpVectors(this.gateFrom, head, e);
-      const look = new THREE.Vector3(p.x, p.y + 1.45, p.z - 10);
+      const look = VR.track.toWorld(p.x, p.y + 1.45, p.z - 10);
       this.camLook.lerpVectors(this.gateLookFrom, look, e);
       this.camera.lookAt(this.camLook);
       this.camera.fov = (this.portrait ? 70 : C.CAMERA_FOV) + e * 30; this.camera.updateProjectionMatrix();
@@ -530,8 +541,8 @@
       if (this.duelCam) {
         const p = this.player;
         const k = Math.min(1, this.gateT / 0.3), e = k * k * (3 - 2 * k);
-        this.camera.position.lerpVectors(this.gateFrom, new THREE.Vector3(p.x, p.y + 1.5, p.z - 0.2), e);
-        this.camLook.lerpVectors(this.gateLookFrom, new THREE.Vector3(p.x, p.y + 1.45, p.z - 10), e);
+        this.camera.position.lerpVectors(this.gateFrom, VR.track.toWorld(p.x, p.y + 1.5, p.z - 0.2), e);
+        this.camLook.lerpVectors(this.gateLookFrom, VR.track.toWorld(p.x, p.y + 1.45, p.z - 10), e);
         this.camera.lookAt(this.camLook);
         this.camera.fov = (this.portrait ? 70 : C.CAMERA_FOV) + e * 30; this.camera.updateProjectionMatrix();
         p.rig.root.visible = this.gateT < 0.22;
@@ -708,8 +719,8 @@
       // keep coordinates small on very long runs
       if (p.z < -C.RECENTER_DISTANCE) {
         const dz = -p.z;
-        p.z += dz; this.world.shift(dz); this.camera.position.z += dz; this.camLook.z += dz;
-        p.object.position.z = p.z;
+        // path coordinates only: the 3D world (and what's on screen) doesn't move
+        p.z += dz; this.world.shift(dz); this.camPath.z += dz; this.lookPath.z += dz;
       }
 
       this.updateEnvironment(dt);
@@ -744,11 +755,19 @@
       this.camBumpV += (-this.camBump * 60 - this.camBumpV * 10) * dt;
       this.camBump += this.camBumpV * dt;
       const dist = C.CAMERA_DISTANCE + (this.portrait ? 1.2 : 0);
-      const tx = p.x * 0.75;
-      let ty = C.CAMERA_HEIGHT + p.y * 0.62 + this.camBump + (this.portrait ? 2.6 : 0);
       const tz = p.z + dist;
+      // the camera follows the runner's lane AT THE CAMERA'S OWN SPOT on the path:
+      // behind a fork or a canyon exit the corridors are elsewhere, and copying the
+      // runner's x would put the camera inside the rock
+      const tr = VR.track;
+      const zn = tr.zoneAt(tz);
+      let cl = p.lane;
+      if (!zn.open.includes(cl)) { cl = zn.open[0]; for (const l of zn.open) if (Math.abs(l - p.lane) < Math.abs(cl - p.lane)) cl = l; }
+      const bx = tr.laneX(tz, cl) + (cl === p.lane ? p.offset || 0 : 0);
+      const tx = bx - THREE.MathUtils.clamp(bx * 0.25, -0.65, 0.65);
+      let ty = C.CAMERA_HEIGHT + p.y * 0.62 + this.camBump + (this.portrait ? 2.6 : 0);
       const k = 1 - Math.exp(-dt * 7);
-      const cam = this.camera.position;
+      const cam = this.camPath;
       // Tunnels: the roof is 5.9 m up. Keep the camera under it while the camera, the
       // player or the stretch just ahead is inside a tunnel, so the view never ends up
       // in the hill above (that hid the runner, worst in portrait and on trains).
@@ -760,14 +779,19 @@
       cam.y += (ty - cam.y) * (1 - Math.exp(-dt * (covered ? 12 : 5)));
       if (this.tunnelCover(cam.z - 0.5, cam.z + 0.5)) cam.y = Math.min(cam.y, cap);   // hard limit inside the tube
       cam.z += (tz - cam.z) * (1 - Math.exp(-dt * 12));
-      this.camLook.x += (p.x * 0.85 - this.camLook.x) * k;
+      const look = this.lookPath;
+      look.x += (p.x - THREE.MathUtils.clamp(p.x * 0.15, -0.4, 0.4) - look.x) * k;
       const lookY = (this.portrait ? 0.6 : 1.2) + p.y * 0.55;
-      this.camLook.y += (lookY + ((this.portrait ? 1.0 : 1.2) + p.y * 0.55 - lookY) * (this.tunCam || 0) - this.camLook.y) * k;
-      this.camLook.z = p.z - C.CAMERA_LOOK_AHEAD;
+      look.y += (lookY + ((this.portrait ? 1.0 : 1.2) + p.y * 0.55 - lookY) * (this.tunCam || 0) - look.y) * k;
+      look.z = p.z - C.CAMERA_LOOK_AHEAD;
+      // path space -> world (turns, hills)
+      const wc = this.camera.position;
+      tr.toWorld(cam.x, cam.y, cam.z, wc);
+      tr.toWorld(look.x, look.y, look.z, this.camLook);
       if (this.shake > 0) {
         this.shake = Math.max(0, this.shake - dt);
         const s = this.shake * 0.5;
-        cam.x += (Math.random() - 0.5) * s; cam.y += (Math.random() - 0.5) * s;
+        wc.x += (Math.random() - 0.5) * s; wc.y += (Math.random() - 0.5) * s;
       }
       this.camera.lookAt(this.camLook);
     }

@@ -2,6 +2,8 @@
  * COLLECTIBLES — coins, lemons (the 'gems' set), power-up blocks and pickup sparkles.
  * Coins and gems are drawn with InstancedMesh (1 draw call for all of
  * them); records are recycled through free-lists (object pooling).
+ * Records live in path space (like the player); drawing goes through
+ * VR.track.toWorld so they follow the turns and hills.
  * ===================================================================== */
 (function () {
   const C = VR.CONFIG;
@@ -80,7 +82,7 @@
     spawnGem(x, y, z, chunk) { return this.gems.spawn(x, y, z, chunk); }
     spawnPowerUp(type, x, y, z, chunk) {
       const o = this.pool.get('pu_' + type);
-      o.position.set(x, y, z);
+      VR.track.toWorld(x, y, z, o.position);
       this.powerups.push({ type, x, y, z, chunk, obj: o });
     }
 
@@ -95,7 +97,7 @@
     }
     shift(dz) {
       for (const set of [this.coins, this.gems, this.fx]) for (const i of set.active) set.items[i].z += dz;
-      for (const p of this.powerups) { p.z += dz; p.obj.position.z = p.z; }
+      for (const p of this.powerups) p.z += dz;          // the world itself doesn't move
     }
 
     burst(x, y, z, color) {
@@ -110,6 +112,7 @@
 
     update(dt, player, game) {
       this.time += dt;
+      const tr = VR.track;
       const px = player.x, py = player.y + (player.sliding ? 0.4 : 0.9), pz = player.z;
       const magnet = game.powerups.active('magnet');
       const R2 = C.MAGNET_RADIUS * C.MAGNET_RADIUS;
@@ -135,7 +138,7 @@
           coins.kill(i);
           continue;
         }
-        v.set(c.x, c.y + Math.sin(this.time * 4 + c.z) * 0.06, c.z);
+        tr.toWorld(c.x, c.y + Math.sin(this.time * 4 + c.z) * 0.06, c.z, v);
         m4.compose(v, q, s); coins.mesh.setMatrixAt(i, m4);
       }
       coins.mesh.instanceMatrix.needsUpdate = true;
@@ -150,7 +153,7 @@
         if (Math.abs(g.z - pz) < 0.8 && Math.abs(g.x - px) < 0.85 && g.y > player.y - 0.3 && g.y < player.y + player.height + 0.4) {
           game.onGem(g.x, g.y, g.z); this.gems.kill(i); continue;
         }
-        v.set(g.x, g.y + Math.sin(this.time * 3) * 0.12, g.z);
+        tr.toWorld(g.x, g.y + Math.sin(this.time * 3) * 0.12, g.z, v);
         m4.compose(v, q, s); this.gems.mesh.setMatrixAt(i, m4);
       }
       this.gems.mesh.instanceMatrix.needsUpdate = true;
@@ -159,7 +162,7 @@
       for (let k = this.powerups.length - 1; k >= 0; k--) {
         const p = this.powerups[k];
         p.obj.rotation.y = this.time * 2; p.obj.rotation.x = 0.35;
-        p.obj.position.y = p.y + Math.sin(this.time * 3 + p.z) * 0.15;
+        tr.toWorld(p.x, p.y + Math.sin(this.time * 3 + p.z) * 0.15, p.z, p.obj.position);
         if (Math.abs(p.z - pz) < 0.9 && Math.abs(p.x - px) < 0.95 && p.y > player.y - 0.5 && p.y < player.y + player.height + 0.5) {
           game.onPowerUp(p.type, p.x, p.y, p.z);
           this.pool.release(p.obj); this.powerups.splice(k, 1);
@@ -174,7 +177,7 @@
         f.life -= dt;
         if (f.life <= 0) { fx.kill(i); continue; }
         f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt; f.vy -= 12 * dt;
-        v.set(f.x, f.y, f.z); const sc = f.life / 0.35; s.set(sc, sc, sc);
+        tr.toWorld(f.x, f.y, f.z, v); const sc = f.life / 0.35; s.set(sc, sc, sc);
         m4.compose(v, q, s); fx.mesh.setMatrixAt(i, m4);
       }
       s.set(1, 1, 1);
