@@ -509,6 +509,34 @@
   }
   @media (max-width: 560px) { .du-name { font-size: 14px; max-width: 24vw; } .du-timer { font-size: 26px; } .du-pips i { width: 8px; height: 8px; } .du-side { gap: 5px; padding: 4px 6px 5px; } }
 
+  /* ---------- channel videos on in-world screens ---------- */
+  .mi-card.mi-video { width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto; }
+  .mi-vtitle { font-family: var(--display); font-size: 20px; color: var(--lemon); }
+  .mi-vframe { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border: 3px solid var(--ink); }
+  .mi-vframe iframe, .mi-vframe #mi-yt { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .mi-vmsg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 14px; text-align: center; padding: 12px; pointer-events: none; }
+  .mi-vmsg[hidden] { display: none; }
+  .mi-vrow { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+  .mi-vlink { color: var(--lemon); }
+  .mi-vhelp { background: none; border: 0; color: #c9b2ff; text-decoration: underline; cursor: pointer; font: inherit; font-size: 13px; padding: 4px; }
+  .mi-vfall { background: var(--panel-2); border: 3px solid var(--ink); padding: 10px 12px; font-size: 14px; line-height: 1.5; }
+  .mi-vfall p { margin: 4px 0; color: var(--muted); }
+  .mi-vfall blockquote { margin: 6px 0; padding: 8px 10px; background: rgba(255,225,74,.12); border-inline-start: 4px solid var(--lemon); color: var(--text); font-size: 16px; }
+
+  /* ---------- missions list ---------- */
+  #missionsList .card { max-height: calc(100% - 24px); overflow-y: auto; width: min(480px, 100%); }
+  .ml-sub { margin: -6px 0 0; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .ml-list { display: flex; flex-direction: column; gap: 8px; }
+  .ml-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 8px 10px; background: var(--panel-2); border: 3px solid var(--ink); }
+  .ml-row.locked { opacity: .55; }
+  .ml-n { width: 30px; height: 30px; display: grid; place-items: center; background: var(--lemon); color: var(--ink); font-family: 'Pixelify Sans', monospace; font-weight: 700; border: 3px solid var(--ink); }
+  .ml-row.locked .ml-n { background: var(--stone); }
+  .ml-name { font-family: var(--display); font-size: 17px; }
+  .ml-st { font-size: 12px; color: var(--muted); }
+  .ml-st.done { color: #8be06a; }
+  .ml-row .btn { width: auto !important; min-width: 0; }
+  .menu-row .btn { min-width: 0; flex: 1 1 140px; }
+
   /* ---------- fullscreen ---------- */
   .fs-ico { display: inline-block; width: 16px; height: 16px; position: relative; flex: none;
     background: linear-gradient(var(--text), var(--text)) 0 0 / 6px 3px no-repeat, linear-gradient(var(--text), var(--text)) 0 0 / 3px 6px no-repeat,
@@ -564,6 +592,7 @@
     <button class="btn wait-btn" id="waitBtn"><span class="vs-ico" aria-hidden="true">⌛</span><span class="wait-txt"><b data-i18n="menu.wait">WAIT FOR A PLAYER</b><small data-i18n="menu.waitSub">1v1 Sniper Arena</small></span></button>
     <div class="menu-row">
       <button class="btn" id="charBtn" data-i18n="menu.character">CHARACTER</button>
+      <button class="btn" id="missionsBtn" data-i18n="menu.missions">MISSIONS</button>
       <button class="btn" id="settingsBtn" data-i18n="menu.settings">SETTINGS</button>
     </div>
     <p class="hint" data-i18n-html="menu.hint"></p>
@@ -671,6 +700,16 @@
   </div>
 </section>
 
+<!-- MISSIONS LIST -->
+<section id="missionsList" class="screen dim" hidden>
+  <div class="card panel ml-card">
+    <h2 class="heading" data-i18n="ml.title">Missions</h2>
+    <p class="ml-sub" data-i18n="ml.sub"></p>
+    <div id="mlList" class="ml-list"></div>
+    <button class="btn" id="mlBack" data-i18n="ml.back">BACK</button>
+  </div>
+</section>
+
 <!-- PAUSE -->
 <section id="pause" class="screen dim" hidden>
   <div class="card panel">
@@ -730,8 +769,10 @@
 <script src="js/missions/level.js"></script>
 <script src="js/missions/fpcontroller.js"></script>
 <script src="js/missions/framework.js"></script>
+<script src="js/missions/extra.js"></script>
 <script src="js/missions/data.js"></script>
 <script src="js/missions/missionui.js"></script>
+<script src="js/missions/video.js"></script>
 <script src="js/missions/missions.js"></script>
 <script src="lib/mqtt.min.js"></script>
 <script src="js/challenge/net.js"></script>

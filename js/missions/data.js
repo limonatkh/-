@@ -219,5 +219,147 @@
         { id: 'exit', type: 'zone', at: 'exitZone', size: [7, 4, 7], requires: 'power_on', flag: 'escaped' },
       ],
     },
+
+    // ===================================================================
+    // MISSION 4 — the clue comes from the channel video «المفكر v.s الفقيه»
+    // (clip 01:21–01:58; at 01:55 a ball with seven stars inside it).
+    // 7 alone does nothing: the note says what to count and from where,
+    // and the two paintings say which way the sun rises.
+    {
+      id: 'm4', order: 4,
+      name: { en: 'The Seven Stars', ar: 'لغز النجوم السبعة' },
+      environment: 'starhall',
+      intro: {
+        en: 'A quiet hall with a tiled floor and an old screen from the Limonat channel. Behind a star-shaped lock in the north wall waits the Star Lemon.',
+        ar: 'قاعة هادئة بأرضية من البلاط وشاشة قديمة من قناة ليمونات. خلف قفل على شكل نجمة في الجدار الشمالي تنتظر الليمونة النجمية.',
+      },
+      objective: { en: 'Find the Star Lemon', ar: 'اعثر على الليمونة النجمية' },
+      objectives: [
+        { text: { en: 'Read the note on the lectern', ar: 'اقرأ الورقة على المنصّة' }, done: 'read_starNote' },
+        { text: { en: 'Watch the screen', ar: 'شاهد الشاشة' }, done: 'watched_tv4' },
+        { text: { en: 'Find the loose tile', ar: 'اعثر على البلاطة المتحرّكة' }, done: 'tile_found' },
+        { text: { en: 'Take what is under it', ar: 'خذ ما تحتها' }, done: 'got_star_key' },
+        { text: { en: 'Open the star lock', ar: 'افتح قفل النجمة' }, done: 'vault_open' },
+        { text: { en: 'Take the Star Lemon', ar: 'خذ الليمونة النجمية' }, done: 'got_star_lemon' },
+      ],
+      secondary: [
+        { id: 'clean', text: { en: 'Lift only the right tile', ar: 'لا ترفع إلا البلاطة الصحيحة' }, type: 'noMistakes', reward: { coins: 25 } },
+      ],
+      success: 'got_star_lemon',
+      rewards: { score: 3000, coins: 90 },
+      repeatable: true, repeatReward: { score: 600 },
+      requires: ['m3'],
+      hints: [
+        { en: 'Watch the clip on the screen to the end. How many stars are inside the ball?', ar: 'شاهد المقطع على الشاشة حتى نهايته. كم نجمة داخل الكرة؟' },
+        { en: 'The sun only rises on one side. Read the words above the two paintings.', ar: 'الشمس تشرق من جهة واحدة فقط. اقرأ الكلمة فوق كل لوحة من اللوحتين.' },
+        { en: 'Do not count the lemon tile itself: the first tile is the one right after it.', ar: 'لا تعُدّ بلاطة الليمون نفسها: البلاطة الأولى هي التي تليها مباشرة.' },
+      ],
+      entities: [
+        { id: 'lectern', type: 'prop', at: 'lectern', model: 'lectern', solid: true },
+        { id: 'starNote', type: 'text', at: 'note', flat: true, style: 'paper', size: 0.05, width: 0.62,
+          title: { en: 'Note on the lectern', ar: 'ورقة على المنصّة' },
+          text: {
+            en: 'To whoever seeks the Star Lemon:\nStart on the lemon tile.\nCount as many tiles as there are stars in the ball,\nwalking toward the sun as it rises.\nWhere the count ends, lift the tile.',
+            ar: 'إلى من يبحث عن الليمونة النجمية:\nابدأ من بلاطة الليمون.\nعُدّ بلاطات بقدر النجوم التي في الكرة،\nسائرًا نحو الشمس حين تُشرق.\nحيث ينتهي العدّ، ارفع البلاطة.',
+          } },
+        { id: 'tv4', type: 'videoScreen', at: 'tv', video: 'thinker', name: { en: 'Limonat channel screen', ar: 'شاشة قناة ليمونات' } },
+        { id: 'poster4', type: 'text', at: 'poster', style: 'sign', size: 0.13, width: 1.9, inspect: false,
+          text: { en: 'NOW SHOWING\nThe Thinker vs the Jurist', ar: 'يُعرض الآن\nالمفكر v.s الفقيه' } },
+        { id: 'eastSign', type: 'text', at: 'eastSign', style: 'sign', size: 0.3, width: 2.6,
+          title: { en: 'Above the east painting', ar: 'فوق اللوحة الشرقية' }, text: { en: 'SUNRISE', ar: 'الشروق' } },
+        { id: 'westSign', type: 'text', at: 'westSign', style: 'sign', size: 0.3, width: 2.6,
+          title: { en: 'Above the west painting', ar: 'فوق اللوحة الغربية' }, text: { en: 'SUNSET', ar: 'الغروب' } },
+        // 15 × 9 tiles; lemon tile in the middle (7,4); 7 tiles toward sunrise (east, +x) = (14,4)
+        { id: 'tiles', type: 'floorTiles', at: 'tiles', nx: 15, nz: 9, size: 1, start: [7, 4], target: [14, 4], flag: 'tile_found',
+          nearMiss: [
+            { tile: [13, 4], say: { en: 'Did you count the lemon tile itself? Start with the tile after it.', ar: 'هل عددت بلاطة الليمون نفسها؟ ابدأ العدّ من البلاطة التي تليها.' } },
+            { tile: [0, 4], say: { en: 'Is this where the sun rises?', ar: 'هل تشرق الشمس من هذه الجهة؟' } },
+            { tile: [1, 4], say: { en: 'Is this where the sun rises?', ar: 'هل تشرق الشمس من هذه الجهة؟' } },
+          ] },
+        { id: 'starKey', type: 'item', at: 'tiles', offset: [7, 0.04, 0], item: 'star_key', name: { en: 'Star Key', ar: 'مفتاح النجمة' },
+          model: 'starKey', itemKind: 'component', showWhen: 'tile_found', float: 0.12 },
+        { id: 'vaultSign', type: 'text', at: 'vaultSign', style: 'stencil', size: 0.2, width: 3, inspect: false, text: '{star}' },
+        { id: 'vault', type: 'compartment', at: 'vault', w: 1.2, h: 1.0, openWhen: 'vault_open',
+          name: { en: 'Star vault', ar: 'خزنة النجمة' }, closedText: { en: 'A heavy wall door. The star lock beside it holds it shut.', ar: 'باب جداري ثقيل. يُبقيه قفل النجمة بجانبه مغلقًا.' } },
+        { id: 'keyhole', type: 'keyhole', at: 'keyhole', item: 'star_key', flag: 'vault_open',
+          name: { en: 'Star lock', ar: 'قفل النجمة' }, okText: { en: 'The star turns. The vault opens.', ar: 'دارت النجمة. انفتحت الخزنة.' } },
+        { id: 'starLemon', type: 'item', at: 'vaultItem', item: 'star_lemon', name: { en: 'Star Lemon', ar: 'الليمونة النجمية' },
+          model: 'goldenLemon', showWhen: 'vault_open' },
+      ],
+    },
+
+    // ===================================================================
+    // MISSION 5 — the clue comes from the channel video «الحكم على الشيء
+    // جزء من تصوره» (clip 00:08–00:30; at 00:28 a screen shows the
+    // prepositions «في», «عن», «على» in that order). The words say WHERE
+    // to look around one cupboard (blackboard: in / fallen off / on top),
+    // the note says WHICH cupboard, and their order sets the lock dials.
+    {
+      id: 'm5', order: 5,
+      name: { en: 'The Three Prepositions', ar: 'لغز حروف الجر الثلاثة' },
+      environment: 'wordroom',
+      intro: {
+        en: 'An empty classroom. Someone locked the Word Lemon in a cabinet and left a lesson on the board. The rest of the answer is on the screen.',
+        ar: 'صفّ فارغ. أقفل أحدهم على ليمونة الكلمات في خزانة وترك درسًا على السبّورة. وبقية الجواب على الشاشة.',
+      },
+      objective: { en: 'Open the word cabinet', ar: 'افتح خزانة الكلمات' },
+      objectives: [
+        { text: { en: 'Read the note by the cabinet', ar: 'اقرأ الورقة عند الخزانة' }, done: 'read_wordNote' },
+        { text: { en: 'Watch the screen', ar: 'شاهد الشاشة' }, done: 'watched_tv5' },
+        { text: { en: 'Read the lesson on the board', ar: 'اقرأ الدرس على السبّورة' }, done: 'read_grammar' },
+        { text: { en: 'Unlock the word cabinet', ar: 'افتح قفل خزانة الكلمات' }, done: 'words_open' },
+        { text: { en: 'Take the Word Lemon', ar: 'خذ ليمونة الكلمات' }, done: 'got_word_lemon' },
+      ],
+      secondary: [
+        { id: 'clean', text: { en: 'Open the lock on the first try', ar: 'افتح القفل من المحاولة الأولى' }, type: 'noMistakes', reward: { coins: 30 } },
+      ],
+      success: 'got_word_lemon',
+      rewards: { score: 3500, coins: 100 },
+      repeatable: true, repeatReward: { score: 700 },
+      requires: ['m4'],
+      hints: [
+        { en: 'Watch the clip on the screen: three words appear one after another. Remember them in that order.', ar: 'شاهد المقطع على الشاشة: تظهر ثلاث كلمات واحدة بعد الأخرى. تذكّرها بهذا الترتيب.' },
+        { en: 'The board says where each word points. The note by the cabinet says around which cupboard.', ar: 'السبّورة تقول إلى أين تشير كل كلمة، والورقة عند الخزانة تقول حول أي خزانة صغيرة.' },
+        { en: 'The fruit is the lemon: use the yellow cupboard. Inside it, fallen off it, on top of it: set the dials in the order the words appeared.', ar: 'الثمرة هي الليمون: الخزانة الصفراء. داخلها، وما سقط عنها، وفوقها: أدِر الأقراص بترتيب ظهور الكلمات.' },
+      ],
+      entities: [
+        { id: 'tv5', type: 'videoScreen', at: 'tv', video: 'tasawwur', name: { en: 'Limonat channel screen', ar: 'شاشة قناة ليمونات' } },
+        { id: 'grammar', type: 'text', at: 'board', style: 'chalk', size: 0.16, width: 5.6,
+          title: { en: 'Lesson on the board', ar: 'الدرس على السبّورة' },
+          text: {
+            en: 'TODAY: THREE LITTLE WORDS\nFI = inside the thing\nALA = on top of the thing\nAN = away from the thing (fallen off it)',
+            ar: 'درس اليوم: حروف الجرّ\nفي: للظرفية (داخل الشيء)\nعلى: للاستعلاء (فوق الشيء)\nعن: للمجاوزة (ما ابتعد عن الشيء أو سقط عنه)',
+          } },
+        { id: 'wordKey', type: 'text', at: 'board', offset: [0, -1.2, 0], style: 'paper', size: 0.11, width: 1.3, inspect: false,
+          text: { en: 'FI = في\nALA = على\nAN = عن', ar: 'في · على · عن' } },
+        { id: 'noteStand', type: 'prop', at: 'noteStand', model: 'lectern', solid: true },
+        { id: 'wordNote', type: 'text', at: 'cabinetNote', flat: true, style: 'paper', size: 0.045, width: 0.62,
+          title: { en: 'Note by the word cabinet', ar: 'ورقة عند خزانة الكلمات' },
+          text: {
+            en: 'The three words on the screen point to three signs,\nall around the little cupboard that has the colour\nof the fruit this game is named after.\nTurn the dials in the order the words appeared.',
+            ar: 'الكلمات الثلاث على الشاشة تدلّ على ثلاث علامات،\nكلها حول الخزانة الصغيرة التي لها لون\nالثمرة التي سُمّيت اللعبة باسمها.\nأدِر الأقراص بالترتيب الذي ظهرت به الكلمات.',
+          } },
+        { id: 'cabinet', type: 'symbolLock', at: 'cabinet', name: { en: 'Word cabinet', ar: 'خزانة الكلمات' },
+          symbols: ['lemon', 'moon', 'leaf', 'star', 'sun', 'drop'], solution: ['sun', 'leaf', 'drop'], opens: 'words_open',
+          lockText: { en: 'Three dials, one for each word.', ar: 'ثلاثة أقراص، قرص لكل كلمة.' } },
+        { id: 'wordLemon', type: 'item', at: 'cabinet', offset: [0, 0.5, 0], item: 'word_lemon', name: { en: 'Word Lemon', ar: 'ليمونة الكلمات' },
+          model: 'goldenLemon', modelArgs: [true], showWhen: 'words_open' },
+        // four cupboards, each with a card inside, on top, and fallen off it
+        ...[
+          ['red', 0xd8463a, { en: 'Red cupboard', ar: 'الخزانة الحمراء' }, 'moon', 'star', 'lemon'],
+          ['blue', 0x4a7ee0, { en: 'Blue cupboard', ar: 'الخزانة الزرقاء' }, 'leaf', 'sun', 'moon'],
+          ['green', 0x4caa48, { en: 'Green cupboard', ar: 'الخزانة الخضراء' }, 'drop', 'lemon', 'star'],
+          ['yellow', 0xffe14a, { en: 'Yellow cupboard', ar: 'الخزانة الصفراء' }, 'sun', 'leaf', 'drop'],
+        ].flatMap(([k, color, name, inside, off, on]) => [
+          { id: 'cup_' + k, type: 'cupboard', at: 'cup_' + k, color, name },
+          { id: 'card_' + k + '_in', type: 'text', at: 'cup_' + k + '_in', flat: true, style: 'paper', size: 0.13, width: 0.32, text: '{' + inside + '}',
+            showWhen: 'opened_cup_' + k, title: { en: 'Card inside the ' + name.en.toLowerCase(), ar: 'بطاقة داخل ' + name.ar } },
+          { id: 'card_' + k + '_on', type: 'text', at: 'cup_' + k + '_on', flat: true, style: 'paper', size: 0.13, width: 0.32, text: '{' + on + '}',
+            title: { en: 'Card on top of the ' + name.en.toLowerCase(), ar: 'بطاقة فوق ' + name.ar } },
+          { id: 'card_' + k + '_off', type: 'text', at: 'cup_' + k + '_off', flat: true, style: 'paper', size: 0.13, width: 0.32, text: '{' + off + '}',
+            title: { en: 'Card on the floor by the ' + name.en.toLowerCase(), ar: 'بطاقة على الأرض قرب ' + name.ar } },
+        ]),
+      ],
+    },
   ];
 })();

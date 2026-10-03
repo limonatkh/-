@@ -4,7 +4,7 @@
  * ===================================================================== */
 (function () {
   const $ = (id) => document.getElementById(id);
-  const SCREENS = ['loading', 'menu', 'character', 'settings', 'pause', 'gameover', 'challenge', 'chresult'];
+  const SCREENS = ['loading', 'menu', 'character', 'settings', 'pause', 'gameover', 'challenge', 'chresult', 'missionsList'];
 
   const store = {
     get(k, d) { try { const v = localStorage.getItem('cubeexpress.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },

@@ -329,7 +329,7 @@
       if (best) {
         const owner = best.e.parent ? best.e.parent.id : best.e.id;
         for (const { s, box } of this.solidBoxes) {
-          if (!s.enabled || s.owner === owner || s.owner === best.e.id) continue;
+          if (!s.enabled || s.owner === owner || s.owner === best.e.id || s.seeThrough) continue;
           if (box.containsPoint(origin)) continue;
           if (ray.intersectBox(box, pt) && pt.distanceTo(origin) < bestD - 0.15) { best = null; break; }
         }

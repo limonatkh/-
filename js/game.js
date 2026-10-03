@@ -109,6 +109,8 @@
       UI.bind('playBtn', () => this.start());
       UI.bind('againBtn', () => this.start());
       UI.bind('charBtn', () => this.setState('character'));
+      UI.bind('missionsBtn', () => this.setState('missionsList'));
+      UI.bind('mlBack', () => this.setState('menu'));
       UI.bind('waitBtn', () => { if (this.settings.fullscreen) VR.Fullscreen.request(); this.duel.openWaitingArena(); });
       UI.bind('charPrev', () => this.cycleChar(-1));
       UI.bind('charNext', () => this.cycleChar(1));
@@ -192,12 +194,13 @@
     // ------------------------------------------------------------ states
     setState(s) {
       this.state = s;
-      const map = { menu: 'menu', character: 'character', settings: 'settings', paused: 'pause', gameover: 'gameover', playing: null, loading: 'loading', challenge: 'challenge', chresult: 'chresult' };
+      const map = { missionsList: 'missionsList', menu: 'menu', character: 'character', settings: 'settings', paused: 'pause', gameover: 'gameover', playing: null, loading: 'loading', challenge: 'challenge', chresult: 'chresult' };
       UI.show(map[s]);
-      UI.hud(s === 'playing' || s === 'paused' || s === 'dying' || s === 'gateEnter' || s === 'countdown' || s === 'duelPick' || s === 'duelEnter');
+      UI.hud(s === 'playing' || s === 'paused' || s === 'dying' || (s === 'gateEnter' && !this.missionFromMenu) || s === 'countdown' || s === 'duelPick' || s === 'duelEnter');
       if (s !== 'playing' && this.duel) this.duel.ui.showPrompt(false);
       VR.Input.setEnabled(s === 'playing');
       if (s === 'menu') UI.menuStats(this.best, this.bank);
+      if (s === 'missionsList') this.renderMissionList();
       if (s === 'character') {
         UI.character(VR.CHARACTERS[this.charIndex]);
         const multi = VR.CHARACTERS.length > 1;
@@ -264,7 +267,36 @@
     }
     pause() { if (this.state !== 'playing') return; this.setState('paused'); VR.Audio.setMusicVolume(0.3); }
     resume() { this.setState('playing'); this.clock.getDelta(); VR.Audio.setMusicVolume(1); }
+    /* ---- Missions list (main menu): replay any mission you have reached. */
+    renderMissionList() {
+      const mgr = this.missions, prog = mgr.progress;
+      let testAll = false;
+      try { testAll = new URLSearchParams(location.search).get('missions') === 'all'; } catch (e) { /* no URL */ }
+      const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const list = document.getElementById('mlList');
+      list.innerHTML = mgr.defs.map(d => {
+        const done = prog.completed[d.id];
+        const open = testAll || mgr.isUnlocked(d);
+        const need = (d.requires || []).map(id => mgr.byId(id)).find(r => r && !prog.completed[r.id]);
+        const st = done ? VR.t('ml.done', { t: VR.Missions.fmtTime(done.best) }) : open ? VR.t('ml.open') : VR.t('ml.locked', { name: need ? VR.L(need.name) : '' });
+        return `<div class="ml-row ${open ? '' : 'locked'}"><span class="ml-n">${d.order}</span>
+          <span><span class="ml-name">${esc(VR.L(d.name))}</span><br><span class="ml-st ${done ? 'done' : ''}">${esc(st)}</span></span>
+          ${open ? `<button class="btn small lemon ml-play" data-id="${d.id}">${VR.t('ml.play')}</button>` : ''}</div>`;
+      }).join('');
+      list.querySelectorAll('.ml-play').forEach(b => b.addEventListener('click', () => { VR.Audio.unlock(); VR.Audio.play('click'); this.playMissionFromMenu(b.dataset.id); }));
+    }
+    playMissionFromMenu(id) {
+      const def = this.missions.byId(id); if (!def) return;
+      if (this.settings.fullscreen) VR.Fullscreen.request();
+      this.missionFromMenu = true; this.runSnapshot = null;
+      this.gateDef = def; this.gateT = 0;
+      this.gateFrom = this.camera.position.clone(); this.gateLookFrom = this.camLook.clone();
+      this.setState('gateEnter');
+      VR.Audio.play('portal');
+    }
+
     toMenu() {
+      this.missionFromMenu = false;
       if (this.duel.match || this.duel.pending || this.duel.pickOpen) this.duel.abort();
       if (this.challenge.active) this.challenge.leave(false);
       if (this.missions.active) this.missions.abort();
@@ -419,6 +451,16 @@
     }
     updateMissionMode(dt) {
       this.missions.update(dt);
+      if (this.state === 'gateReturn' && this.fade.value >= 0.99 && this.missionFromMenu) {
+        // played from the missions list: no run to go back to; coins go to the bank
+        this.missions.exit();
+        const r = this.returnRewards;
+        if (r && r.coins) { this.bank += r.coins; UI.store.set('bank', this.bank); }
+        this.toMenu(); this.fade.target = 0;
+        this.setState('missionsList');
+        if (r && (r.score || r.coins)) setTimeout(() => UI.toast(VR.t('toast.reward', { score: r.score.toLocaleString('en-US'), coins: r.coins }), 2200), 300);
+        return;
+      }
       if (this.state === 'gateReturn' && this.fade.value >= 0.99) {
         this.missions.exit();
         this.restoreRun(this.runSnapshot, this.returnRewards);
@@ -610,7 +652,7 @@
       const st = this.state;
       if (st === 'playing') this.updatePlaying(dt);
       else if (st === 'dying') { this.player.update(dt, 0, this.world, this); this.updateCamera(dt); }
-      else if (st === 'menu' || st === 'character' || st === 'loading' || st === 'challenge') this.updateMenu(dt);
+      else if (st === 'menu' || st === 'character' || st === 'loading' || st === 'challenge' || st === 'missionsList') this.updateMenu(dt);
       else if (st === 'settings' && this.settingsReturn !== 'paused') this.updateMenu(dt);
       else if (st === 'gateEnter') this.updateGateEnter(dt);
       else if (st === 'mission' || st === 'gateReturn') this.updateMissionMode(dt);

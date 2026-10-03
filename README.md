@@ -347,6 +347,49 @@ The room code's last digit picks the relay, so both players use the same one. Te
 run any MQTT broker with WebSockets and add `?relay=ws://127.0.0.1:8899` to the URL
 (the invite link keeps this parameter).
 
+## Missions 4 and 5: clues from the channel videos
+
+Two more missions use the Limonat channel videos as clues. The detail in a video is only
+**part** of each solution. Both use the existing gate → mission → return flow, so the run
+(distance, score, coins, power-ups) is saved and restored exactly as for missions 1-3.
+
+**Mission 4 · لغز النجوم السبعة (`starhall`)**: video «المفكر v.s الفقيه», clip 01:21–01:58
+(at 01:55: a ball with seven stars inside it).
+- A note: start on the lemon tile, count as many tiles as there are stars in the ball, toward the
+  rising sun, lift that tile.
+- The 15 × 9 tile floor has the lemon tile in the middle; the east painting says «الشروق» (sunrise),
+  the west one «الغروب» (sunset).
+- So: 7 (video) + direction (paintings) + start (note/lemon) → the 7th tile east. Under it the
+  Star Key → star lock → vault → Star Lemon. Wrong tiles stay put (mistake); the two typical
+  slips (counting the lemon tile, walking toward sunset) get a gentle hint.
+
+**Mission 5 · لغز حروف الجر الثلاثة (`wordroom`)**: video «الحكم على الشيء جزء من تصوره», clip
+00:08–00:30 (at 00:28: «في», then «عن», then «على»).
+- The blackboard teaches what each word points to: في inside, على on top, عن away from / fallen off.
+- The note says which cupboard: the one the colour of the fruit the game is named after (lemon → yellow).
+- Each of the four cupboards has a card inside, on top and fallen off it, so you must use the right
+  cupboard, the right meanings, and the video's order for the three dials (في, عن, على).
+  The board lists the words in a different order, so the video is needed.
+
+**Videos inside the world**: `js/missions/video.js`.
+- `VR.VIDEOS` holds each video (YouTube id, segment, clue time, clue description). Screens in
+  mission data only name a key (`{ type: 'videoScreen', video: 'thinker' }`); adding videos
+  never touches mission code.
+- The TV opens the clip with the YouTube IFrame Player (from the given start, stops at the end,
+  replay button, "open on YouTube").
+- If it can't play (offline, blocked embedding, or nothing after a few seconds: a button appears),
+  the owner's description of the clue is shown and copied to the journal, so no mission can get stuck.
+- Nothing is downloaded. To play local files instead, add them and extend `VR.VIDEOS`.
+
+**Missions list** (main menu → المهمات): every mission with its status; replay any reached
+mission from the menu (rewards: coins to the bank). For testing, `?missions=all` in the URL
+opens every mission in this list.
+
+New/changed files: `js/missions/video.js`, `js/missions/extra.js` (models, components
+`videoScreen` · `floorTiles` · `keyhole` · `cupboard`, environments `starhall` · `wordroom`),
+`js/missions/data.js` (m4, m5), `js/missions/missions.js` (see-through solids for aiming),
+`js/game.js` + `index.html` (missions list), `js/i18n.js`, `js/ui.js`.
+
 ## 1v1 Sniper Arena (ساحة القنص)
 
 A live first-person duel between two players, started from the road. Missions and the race
